@@ -1,18 +1,22 @@
-name: Publish to PyPI
+name: Release
+
 on:
   push:
     tags: ["v*.*.*"]
+
 permissions:
-  id-token: write
   contents: read
+  id-token: write
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: pypi
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
+        with:
+          python-version: "3.11"
       - uses: astral-sh/setup-uv@v3
       - run: uv build
       - run: uv publish
