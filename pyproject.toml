@@ -10,9 +10,6 @@ requires-python = ">=3.11"
 dependencies = []
 classifiers = ["Operating System :: POSIX :: Linux"]
 
-[project.scripts]
-nanoslurm = "nanoslurm:main"
-
 [build-system]
 requires = ["hatchling; sys_platform == 'linux'"]
 build-backend = "hatchling.build"
