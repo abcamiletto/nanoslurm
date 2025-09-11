@@ -9,9 +9,6 @@ authors = [
 requires-python = ">=3.11"
 dependencies = []
 
-[project.scripts]
-nanoslurm = "nanoslurm:main"
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
