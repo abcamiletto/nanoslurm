@@ -15,8 +15,9 @@ It uses a tiny POSIX-compatible shell script to call `sbatch` and related comman
 ## Requirements
 
 - SLURM cluster with `sbatch`, `squeue`, and optionally `sacct` / `scontrol`
-- Python ≥ 3.9
+- Python ≥ 3.11
 - Linux operating system
+
 
 ## Quickstart
 

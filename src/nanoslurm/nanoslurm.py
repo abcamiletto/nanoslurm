@@ -198,7 +198,10 @@ def _squeue_status(job_id: int) -> Optional[str]:
     if not _which("squeue"):
         return None
     out = _run(["squeue", "-j", str(job_id), "-h", "-o", "%T"], check=False).stdout.strip()
-    return out or None
+    if out:
+        token = out.split()[0].split("+")[0].split("(")[0].rstrip("*")
+        return token
+    return None
 
 
 def _sacct_status(job_id: int) -> Optional[str]:
