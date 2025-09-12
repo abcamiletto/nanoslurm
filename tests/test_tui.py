@@ -1,11 +1,15 @@
 import types
 
+import pytest
+
+from nanoslurm.nanoslurm import SlurmUnavailableError
 from nanoslurm.tui import _list_jobs
 
 
 def test_list_jobs_no_squeue(monkeypatch):
     monkeypatch.setattr("nanoslurm.tui._which", lambda cmd: False)
-    assert _list_jobs() == []
+    with pytest.raises(SlurmUnavailableError):
+        _list_jobs()
 
 
 def test_list_jobs_parse(monkeypatch):
