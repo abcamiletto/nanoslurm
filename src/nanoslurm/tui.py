@@ -8,16 +8,8 @@ from textual.widgets import DataTable, Footer, Header
 
 from .backend import list_jobs
 
-# Use a minimal style that respects the user's terminal colors.  By default
-# Textual sets a dark theme that overrides the terminal background which makes
-# the TUI look out of place when launched in a customised terminal.  Setting the
-# background to ``default`` keeps the terminal's own colours for all widgets.
-BASE_CSS = """
-Screen, Header, Footer, DataTable {
-    background: default;
-    color: default;
-}
-"""
+BASE_CSS = ""
+
 
 
 class JobApp(App):
