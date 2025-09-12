@@ -6,7 +6,7 @@ from collections import Counter
 from textual.app import App, ComposeResult
 from textual.widgets import DataTable, Footer, Header
 
-from .backend import list_jobs
+from .backend import job_history, list_jobs
 
 BASE_CSS = ""
 
@@ -76,7 +76,13 @@ class ClusterApp(App):
     def on_mount(self) -> None:  # pragma: no cover - runtime hook
         self.state_table.add_columns("State", "Count", "Percent")
         self.partition_table.add_columns("Partition", "Jobs", "Percent")
-        self.user_table.add_columns("User", "Jobs", "Percent")
+        self.user_table.add_columns(
+            "User",
+            "Jobs",
+            "Percent",
+            "Succeeded (24h)",
+            "Failed (24h)",
+        )
         self.refresh_tables()
         self.set_interval(2.0, self.refresh_tables)
 
@@ -86,6 +92,7 @@ class ClusterApp(App):
         state_counts = Counter(job.last_status for job in job_list)
         part_counts = Counter(job.partition for job in job_list)
         user_counts = Counter(job.user for job in job_list)
+        history = job_history()
 
         state_rows = sorted(
             (state, cnt, round(cnt / total * 100, 1)) for state, cnt in state_counts.items()
@@ -95,7 +102,16 @@ class ClusterApp(App):
         )
         user_rows = []
         for user, cnt in sorted(user_counts.items(), key=lambda x: (-x[1], x[0]))[:5]:
-            user_rows.append((user, cnt, round(cnt / total * 100, 1)))
+            hist = history.get(user, {"completed": 0, "failed": 0})
+            user_rows.append(
+                (
+                    user,
+                    cnt,
+                    round(cnt / total * 100, 1),
+                    hist.get("completed", 0),
+                    hist.get("failed", 0),
+                )
+            )
 
         self.state_table.clear()
         for state, count, pct in state_rows:
@@ -104,8 +120,10 @@ class ClusterApp(App):
         for part, count, pct in part_rows:
             self.partition_table.add_row(part, str(count), f"{pct:.1f}%")
         self.user_table.clear()
-        for user, count, pct in user_rows:
-            self.user_table.add_row(user, str(count), f"{pct:.1f}%")
+        for user, count, pct, succeeded, failed in user_rows:
+            self.user_table.add_row(
+                user, str(count), f"{pct:.1f}%", str(succeeded), str(failed)
+            )
 
 
 __all__ = ["JobApp", "ClusterApp"]

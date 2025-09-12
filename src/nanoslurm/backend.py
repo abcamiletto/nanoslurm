@@ -5,7 +5,7 @@ import shlex
 import subprocess
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterable, Optional, Sequence, Union
 
@@ -246,6 +246,49 @@ def list_jobs(user: Optional[str] = None) -> list[Job]:
     return rows
 
 
+def job_history() -> dict[str, dict[str, int]]:
+    """Return per-user job completion statistics for the last 24 hours.
+
+    Uses ``sacct`` with an explicit 24-hour window to gather counts of
+    completed and failed jobs for all users. If ``sacct`` is unavailable,
+    an empty mapping is returned.
+    """
+    if not _which("sacct"):
+        return {}
+
+    now = datetime.now()
+    start = now - timedelta(hours=24)
+    cmd = [
+        "sacct",
+        "-a",
+        "-X",
+        "-n",
+        "--parsable2",
+        "-S",
+        start.strftime("%Y-%m-%dT%H:%M:%S"),
+        "-E",
+        now.strftime("%Y-%m-%dT%H:%M:%S"),
+        "-o",
+        "User,State",
+    ]
+    out = _run(cmd, check=False).stdout
+    stats: dict[str, dict[str, int]] = {}
+    for line in out.splitlines():
+        parts = line.split("|")
+        if len(parts) < 2:
+            continue
+        user, state = parts[0], parts[1]
+        if not user:
+            continue
+        token = state.split()[0].split("+")[0].split("(")[0].rstrip("*")
+        entry = stats.setdefault(user, {"completed": 0, "failed": 0})
+        if token == "COMPLETED":
+            entry["completed"] += 1
+        elif token in _TERMINAL:
+            entry["failed"] += 1
+    return stats
+
+
 def _squeue_status(job_id: int) -> Optional[str]:
     if not _which("squeue"):
         return None
@@ -288,4 +331,5 @@ __all__ = [
     "SlurmUnavailableError",
     "submit",
     "list_jobs",
+    "job_history",
 ]
