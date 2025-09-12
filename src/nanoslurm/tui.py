@@ -6,7 +6,7 @@ from collections import Counter
 from textual.app import App, ComposeResult
 from textual.widgets import DataTable, Footer, Header
 
-from .backend import list_jobs
+from .backend import list_jobs, partition_utilization
 
 BASE_CSS = ""
 
@@ -75,7 +75,7 @@ class ClusterApp(App):
 
     def on_mount(self) -> None:  # pragma: no cover - runtime hook
         self.state_table.add_columns("State", "Count", "Percent")
-        self.partition_table.add_columns("Partition", "Jobs", "Percent")
+        self.partition_table.add_columns("Partition", "Jobs", "Percent", "Util%")
         self.user_table.add_columns("User", "Jobs", "Percent")
         self.refresh_tables()
         self.set_interval(2.0, self.refresh_tables)
@@ -93,6 +93,10 @@ class ClusterApp(App):
         part_rows = sorted(
             (part, cnt, round(cnt / total * 100, 1)) for part, cnt in part_counts.items()
         )
+        try:
+            util_map = partition_utilization()
+        except Exception:  # pragma: no cover - runtime environment
+            util_map = {}
         user_rows = []
         for user, cnt in sorted(user_counts.items(), key=lambda x: (-x[1], x[0]))[:5]:
             user_rows.append((user, cnt, round(cnt / total * 100, 1)))
@@ -102,7 +106,8 @@ class ClusterApp(App):
             self.state_table.add_row(state, str(count), f"{pct:.1f}%")
         self.partition_table.clear()
         for part, count, pct in part_rows:
-            self.partition_table.add_row(part, str(count), f"{pct:.1f}%")
+            util = util_map.get(part, 0.0)
+            self.partition_table.add_row(part, str(count), f"{pct:.1f}%", f"{util:.1f}%")
         self.user_table.clear()
         for user, count, pct in user_rows:
             self.user_table.add_row(user, str(count), f"{pct:.1f}%")

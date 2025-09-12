@@ -246,6 +246,66 @@ def list_jobs(user: Optional[str] = None) -> list[Job]:
     return rows
 
 
+def _parse_gpu(gres: str) -> int:
+    """Extract total GPU count from a SLURM GRES string."""
+    total = 0
+    for token in gres.split(","):
+        token = token.strip().split("(")[0]
+        if token.startswith("gpu:"):
+            try:
+                total += int(token.split(":")[-1])
+            except ValueError:
+                pass
+    return total
+
+
+def _partition_caps() -> dict[str, dict[str, int]]:
+    """Return total CPUs/GPUs available in each partition."""
+    _require("sinfo")
+    out = _run(["sinfo", "-ah", "-o", "%P|%C|%G"], check=False).stdout
+    caps: dict[str, dict[str, int]] = {}
+    for line in out.splitlines():
+        part, c_field, g_field = (line + "||").split("|")[:3]
+        part = part.rstrip("*")
+        cpus = 0
+        if c_field:
+            try:
+                cpus = int(c_field.split("/")[-1])
+            except ValueError:
+                pass
+        caps[part] = {"cpus": cpus, "gpus": _parse_gpu(g_field)}
+    return caps
+
+
+def partition_utilization() -> dict[str, float]:
+    """Return per-partition utilization percentage based on running jobs."""
+    caps = _partition_caps()
+    _require("squeue")
+    out = _run(["squeue", "-h", "-t", "RUNNING", "-o", "%P|%C|%b"], check=False).stdout
+    usage: dict[str, dict[str, int]] = {}
+    for line in out.splitlines():
+        part, c_field, g_field = (line + "||").split("|")[:3]
+        cpus = 0
+        if c_field:
+            try:
+                cpus = int(c_field)
+            except ValueError:
+                pass
+        gpus = _parse_gpu(g_field)
+        u = usage.setdefault(part, {"cpus": 0, "gpus": 0})
+        u["cpus"] += cpus
+        u["gpus"] += gpus
+    utils: dict[str, float] = {}
+    for part, cap in caps.items():
+        use = usage.get(part, {})
+        cpu_total = cap.get("cpus", 0)
+        gpu_total = cap.get("gpus", 0)
+        cpu_pct = use.get("cpus", 0) / cpu_total if cpu_total else 0.0
+        gpu_pct = use.get("gpus", 0) / gpu_total if gpu_total else 0.0
+        utils[part] = max(cpu_pct, gpu_pct) * 100
+    return utils
+
+
 def _squeue_status(job_id: int) -> Optional[str]:
     if not _which("squeue"):
         return None
@@ -288,4 +348,5 @@ __all__ = [
     "SlurmUnavailableError",
     "submit",
     "list_jobs",
+    "partition_utilization",
 ]
