@@ -9,6 +9,8 @@ from textual.widgets import DataTable, Footer, Header, TabbedContent, TabPane
 
 from .backend import list_jobs, node_state_counts, recent_completions
 
+from .backend import list_jobs, partition_utilization, recent_completions
+
 BASE_CSS = ""
 
 
@@ -75,6 +77,9 @@ class ClusterApp(App):
                 self.partition_table = DataTable()
                 self.user_table = DataTable()
                 yield Center(self.node_table)
+                self.state_table = DataTable()
+                self.partition_table = DataTable()
+                self.user_table = DataTable()
                 yield Center(self.state_table)
                 yield Center(self.partition_table)
                 yield Center(self.user_table)
@@ -85,6 +90,12 @@ class ClusterApp(App):
         self.node_table.add_columns("State", "Nodes", "Percent")
         self.state_table.add_columns("State", "Jobs", "Share%")
         self.partition_table.add_columns("Partition", "Jobs", "Running", "Pending", "Share%")
+        self.state_table.add_columns("State", "Jobs", "Share%")
+        self.partition_table.add_columns(
+            "Partition", "Jobs", "Running", "Pending", "Share%", "Util%"
+        )
+
+
         self.user_table.add_columns("User", "Jobs", "Running", "Pending", "Share%")
         self.refresh_tables()
         self.set_interval(2.0, self.refresh_tables)
@@ -115,6 +126,11 @@ class ClusterApp(App):
         for state, count, pct in node_rows:
             self.node_table.add_row(state, str(count), f"{pct:.1f}%")
 
+        try:
+            util_map = partition_utilization()
+        except Exception:  # pragma: no cover - runtime environment
+            util_map = {}
+
         self.state_table.clear()
         for state, cnt in sorted(state_counts.items()):
             self.state_table.add_row(state, str(cnt), f"{cnt / total * 100:.1f}%")
@@ -126,6 +142,19 @@ class ClusterApp(App):
             pending = cnts.get("PENDING", 0)
             share = jobs / total * 100
             self.partition_table.add_row(part, str(jobs), str(running), str(pending), f"{share:.1f}%")
+
+            util = util_map.get(part, 0.0)
+            self.partition_table.add_row(
+                part,
+                str(jobs),
+                str(running),
+                str(pending),
+                f"{share:.1f}%",
+                f"{util:.1f}%",
+            )
+
+            self.partition_table.add_row(part, str(jobs), str(running), str(pending), f"{share:.1f}%")
+
 
             if part not in self.partition_tables:
                 table = DataTable()
