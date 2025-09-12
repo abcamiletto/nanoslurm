@@ -1,23 +1,19 @@
-name: Release
+name: Tag Version
 
 on:
-  workflow_run:
-    workflows: ["Tag Version"]
-    types:
-      - completed
+  push:
+    branches: ["main"]
 
 permissions:
-  contents: read
-  id-token: write
+  contents: write
 
 jobs:
-  publish:
+  tag:
     runs-on: ubuntu-latest
-    environment: pypi
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v3
         with:
           python-version: "3.11"
@@ -38,7 +34,14 @@ jobs:
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
-      - run: uv build
+      - name: Create tag
         if: steps.version.outputs.changed == 'true'
-      - run: uv publish
-        if: steps.version.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "Tag v${{ steps.version.outputs.version }} already exists"
+          else
+            git tag "v${{ steps.version.outputs.version }}"
+            git push origin "v${{ steps.version.outputs.version }}"
+          fi
