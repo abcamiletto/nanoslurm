@@ -94,6 +94,14 @@ def stats() -> None:
     ClusterApp().run()
 
 
+@app.command("summary")
+def summary() -> None:
+    """Launch a Textual TUI summarizing recent completions."""
+    from .tui import SummaryApp
+
+    SummaryApp().run()
+
+
 defaults_app = typer.Typer(help="Manage default settings")
 app.add_typer(defaults_app, name="defaults")
 
