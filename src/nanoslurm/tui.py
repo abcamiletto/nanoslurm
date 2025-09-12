@@ -9,6 +9,7 @@ from textual.widgets import DataTable, Footer, Header, TabbedContent, TabPane
 
 from .backend import list_jobs, partition_utilization, recent_completions
 
+
 BASE_CSS = ""
 
 
@@ -84,6 +85,8 @@ class ClusterApp(App):
         self.partition_table.add_columns(
             "Partition", "Jobs", "Running", "Pending", "Share%", "Util%"
         )
+
+
         self.user_table.add_columns("User", "Jobs", "Running", "Pending", "Share%")
         self.refresh_tables()
         self.set_interval(2.0, self.refresh_tables)
@@ -109,6 +112,7 @@ class ClusterApp(App):
         except Exception:  # pragma: no cover - runtime environment
             util_map = {}
 
+
         self.state_table.clear()
         for state, cnt in sorted(state_counts.items()):
             self.state_table.add_row(state, str(cnt), f"{cnt / total * 100:.1f}%")
@@ -128,6 +132,9 @@ class ClusterApp(App):
                 f"{share:.1f}%",
                 f"{util:.1f}%",
             )
+
+            self.partition_table.add_row(part, str(jobs), str(running), str(pending), f"{share:.1f}%")
+
 
             if part not in self.partition_tables:
                 table = DataTable()

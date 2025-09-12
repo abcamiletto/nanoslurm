@@ -246,7 +246,6 @@ def list_jobs(user: Optional[str] = None) -> list[Job]:
             )
     return rows
 
-
 def _parse_gpu(gres: str) -> int:
     """Extract total GPU count from a SLURM GRES string."""
     total = 0
@@ -305,6 +304,7 @@ def partition_utilization() -> dict[str, float]:
         gpu_pct = use.get("gpus", 0) / gpu_total if gpu_total else 0.0
         utils[part] = max(cpu_pct, gpu_pct) * 100
     return utils
+
 
 
 def recent_completions(span: str = "day", count: int = 7) -> list[tuple[str, int]]:
