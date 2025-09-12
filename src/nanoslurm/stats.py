@@ -33,6 +33,27 @@ def node_state_counts() -> dict[str, int]:
     return dict(counts)
 
 
+def partition_node_state_counts() -> dict[str, dict[str, int]]:
+    """Return node state counts grouped by partition."""
+    rows = _sinfo(
+        {"part": "%P", "state": "%T", "count": "%D"},
+        args=["-a"],
+        runner=_run,
+        which_func=_which,
+    )
+    counts: dict[str, Counter[str]] = {}
+    for r in rows:
+        part = r.get("part", "").rstrip("*")
+        state = r.get("state", "")
+        token = normalize_state(state)
+        try:
+            cnt = int(r.get("count", "0"))
+        except ValueError:
+            continue
+        counts.setdefault(part, Counter())[token] += cnt
+    return {p: dict(c) for p, c in counts.items()}
+
+
 def recent_completions(span: str = "day", count: int = 7) -> list[tuple[str, int]]:
     """Return counts of recently completed jobs grouped by *span*."""
     if span not in {"day", "week"}:
