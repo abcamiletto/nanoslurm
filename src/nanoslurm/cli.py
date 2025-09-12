@@ -114,6 +114,14 @@ def run(
         console.print(f"stderr: {job.stderr_path}")
 
 
+@app.command("jobs")
+def jobs() -> None:
+    """Launch a Textual TUI to view current user's jobs."""
+    from .tui import JobApp
+
+    JobApp().run()
+
+
 defaults_app = typer.Typer(help="Manage default settings")
 app.add_typer(defaults_app, name="defaults")
 
