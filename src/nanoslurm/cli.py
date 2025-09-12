@@ -1,61 +1,25 @@
 from __future__ import annotations
 
 import shlex
-from pathlib import Path
 from typing import Optional
 
 import typer
 import yaml
-from platformdirs import user_config_dir
 from rich.console import Console
 from rich.table import Table
 
+from .defaults import (
+    CONFIG_PATH,
+    DEFAULTS,
+    KEY_HELP,
+    KEY_TYPES,
+    load_defaults,
+    save_defaults,
+)
 from .nanoslurm import submit
 
 app = typer.Typer(help="Submit and manage jobs with nanoslurm")
 console = Console()
-
-# Allowed keys and their types for default configuration
-KEY_TYPES: dict[str, type] = {
-    "name": str,
-    "cluster": str,
-    "time": str,
-    "cpus": int,
-    "memory": int,
-    "gpus": int,
-    "stdout_file": str,
-    "stderr_file": str,
-    "signal": str,
-    "workdir": str,
-}
-
-# Minimal built-in defaults; most values must be supplied via CLI or config
-DEFAULTS: dict[str, object] = {
-    "name": "job",
-    "stdout_file": "./slurm_logs/%j.txt",
-    "stderr_file": "./slurm_logs/%j.err",
-    "signal": "SIGUSR1@90",
-    "workdir": ".",
-}
-
-CONFIG_PATH = Path(user_config_dir("nanoslurm")) / "config.yaml"
-
-
-def _load_defaults() -> dict[str, object]:
-    data = DEFAULTS.copy()
-    if CONFIG_PATH.exists():
-        try:
-            loaded = yaml.safe_load(CONFIG_PATH.read_text()) or {}
-            if isinstance(loaded, dict):
-                data.update(loaded)
-        except Exception:
-            pass
-    return data
-
-
-def _save_defaults(cfg: dict[str, object]) -> None:
-    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CONFIG_PATH.write_text(yaml.safe_dump(cfg, sort_keys=False))
 
 
 @app.command()
@@ -74,7 +38,7 @@ def run(
     interactive: bool = typer.Option(False, "--interactive", "-i", help="Prompt for missing values interactively"),
 ) -> None:
     """Submit a job using nanoslurm."""
-    defaults = _load_defaults()
+    defaults = load_defaults()
     values: dict[str, object] = {
         "name": name or defaults.get("name"),
         "cluster": cluster or defaults.get("cluster"),
@@ -129,22 +93,35 @@ app.add_typer(defaults_app, name="defaults")
 @defaults_app.command("show")
 def defaults_show() -> None:
     """Display current defaults."""
-    cfg = _load_defaults()
+    cfg = load_defaults()
     table = Table("key", "value")
     for k, v in cfg.items():
         table.add_row(k, str(v))
     console.print(table)
 
-
 @defaults_app.command("set")
-def defaults_set(key: str, value: str) -> None:
-    """Set a default value."""
+def defaults_set(
+    key: str = typer.Argument(..., help=f"Configuration key to set. Options: {KEY_HELP}"),
+    value: str = typer.Argument(..., help="Value to store for the given key"),
+) -> None:
+    """Set a default value.
+
+    Provides clearer feedback if an unknown key is supplied or if the value
+    cannot be converted to the expected type.
+    """
     if key not in KEY_TYPES:
-        raise typer.BadParameter(f"Unknown key: {key}")
-    cfg = _load_defaults()
+        allowed = ", ".join(KEY_TYPES)
+        raise typer.BadParameter(f"Unknown key: {key}. Allowed keys: {allowed}")
+    cfg = load_defaults()
     typ = KEY_TYPES[key]
-    cfg[key] = typ(value) if typ is int else value
-    _save_defaults(cfg)
+    if typ is int:
+        try:
+            cfg[key] = int(value)
+        except ValueError:
+            raise typer.BadParameter(f"{key} expects type int") from None
+    else:
+        cfg[key] = value
+    save_defaults(cfg)
     console.print(f"[green]{key} set to {cfg[key]}[/green]")
 
 
@@ -153,14 +130,14 @@ def defaults_reset() -> None:
     """Clear all saved defaults."""
     if CONFIG_PATH.exists():
         CONFIG_PATH.unlink()
-    _save_defaults(DEFAULTS.copy())
+    save_defaults(DEFAULTS.copy())
     console.print("[green]Defaults reset[/green]")
 
 
 @defaults_app.command("edit")
 def defaults_edit() -> None:
     """Edit defaults in your configured editor."""
-    content = yaml.safe_dump(_load_defaults(), sort_keys=False)
+    content = yaml.safe_dump(load_defaults(), sort_keys=False)
     result = typer.edit(content, extension=".yaml")
     if result is None:
         console.print("[yellow]No changes made[/yellow]")
@@ -172,7 +149,7 @@ def defaults_edit() -> None:
     except Exception as exc:
         console.print(f"[red]Invalid YAML: {exc}[/red]")
         raise typer.Exit(code=1)
-    _save_defaults(data)
+    save_defaults(data)
     console.print("[green]Defaults updated[/green]")
 
 
