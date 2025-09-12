@@ -22,9 +22,7 @@ class SlurmUnavailableError(RuntimeError):
 def _require(cmd: str) -> None:
     """Ensure *cmd* exists on PATH, otherwise raise ``SlurmUnavailableError``."""
     if not _which(cmd):
-        raise SlurmUnavailableError(
-            f"Required command '{cmd}' not found. Is this a SLURM environment?"
-        )
+        raise SlurmUnavailableError(f"Required command '{cmd}' not found. Is this a SLURM environment?")
 
 
 def submit(
