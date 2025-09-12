@@ -141,7 +141,7 @@ class Job:
     partition: str
     stdout_path: Optional[Path]
     stderr_path: Optional[Path]
-    state: Optional[str] = None
+    last_status: Optional[str] = None
 
     @property
     def output_file(self) -> Optional[Path]:
@@ -154,10 +154,11 @@ class Job:
         if not (_which("squeue") or _which("sacct")):
             raise SlurmUnavailableError("squeue or sacct not found on PATH")
         s = _squeue_status(self.id)
-        if s:
-            return s
-        s = _sacct_status(self.id)
-        return s or "UNKNOWN"
+        if not s:
+            s = _sacct_status(self.id)
+        s = s or "UNKNOWN"
+        self.last_status = s
+        return s
 
     def info(self) -> dict[str, str]:
         _require("scontrol")
@@ -225,12 +226,12 @@ def list_jobs(user: Optional[str] = None) -> list[Job]:
     for line in out.splitlines():
         parts = line.split("|")
         if len(parts) == 5:
-            jid, name, usr, part, state = parts
+            jid, name, usr, part, status = parts
             try:
                 jid_int = int(jid)
             except ValueError:
                 continue
-            token = state.split()[0].split("+")[0].split("(")[0].rstrip("*")
+            token = status.split()[0].split("+")[0].split("(")[0].rstrip("*")
             rows.append(
                 Job(
                     id=jid_int,
@@ -239,7 +240,7 @@ def list_jobs(user: Optional[str] = None) -> list[Job]:
                     partition=part,
                     stdout_path=None,
                     stderr_path=None,
-                    state=token,
+                    last_status=token,
                 )
             )
     return rows
