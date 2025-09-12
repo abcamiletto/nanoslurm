@@ -11,26 +11,11 @@ from .backend import list_jobs
 # Use a minimal style that respects the user's terminal colors.  By default
 # Textual sets a dark theme that overrides the terminal background which makes
 # the TUI look out of place when launched in a customised terminal.  Setting the
-# background to ``default`` keeps the terminal's own colours and also applies
-# the same palette to headers, footers and tables.
+# background to ``default`` keeps the terminal's own colours for all widgets.
 BASE_CSS = """
-Screen {
+Screen, Header, Footer, DataTable {
     background: default;
     color: default;
-}
-Header, Footer {
-    background: default;
-    color: default;
-}
-DataTable {
-    background: default;
-    color: default;
-    --header-background: default;
-    --header-color: default;
-    --cursor-background: grey30;
-    --cursor-color: default;
-    --even-row-background: default;
-    --odd-row-background: grey23;
 }
 """
 
@@ -57,7 +42,6 @@ class JobApp(App):
         self.table.add_columns("ID", "Name", "State")
         self.table.show_cursor = True
         self.table.cursor_type = "row"
-        self.table.zebra_stripes = True
         self.refresh_table()
         self.set_interval(2.0, self.refresh_table)
         self.set_focus(self.table)
@@ -101,8 +85,6 @@ class ClusterApp(App):
         self.state_table.add_columns("State", "Count", "Percent")
         self.partition_table.add_columns("Partition", "Jobs", "Percent")
         self.user_table.add_columns("User", "Jobs", "Percent")
-        for table in (self.state_table, self.partition_table, self.user_table):
-            table.zebra_stripes = True
         self.refresh_tables()
         self.set_interval(2.0, self.refresh_tables)
 
