@@ -246,6 +246,35 @@ def list_jobs(user: Optional[str] = None) -> list[Job]:
     return rows
 
 
+def fairshare_scores() -> dict[str, float]:
+    """Return a mapping of users to their fair-share scores.
+
+    The function attempts to query :command:`sprio` first and falls back to
+    :command:`sshare`. If neither command is available an empty mapping is
+    returned.
+    """
+
+    cmd: Optional[Sequence[str]] = None
+    if _which("sprio"):
+        cmd = ["sprio", "-o", "user,fairshare", "-n"]
+    elif _which("sshare"):
+        cmd = ["sshare", "-o", "user,fairshare", "-n"]
+    if not cmd:
+        return {}
+
+    out = _run(cmd, check=False).stdout
+    scores: dict[str, float] = {}
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) >= 2:
+            user, val = parts[0], parts[1]
+            try:
+                scores[user] = float(val)
+            except ValueError:
+                continue
+    return scores
+
+
 def _squeue_status(job_id: int) -> Optional[str]:
     if not _which("squeue"):
         return None
@@ -288,4 +317,5 @@ __all__ = [
     "SlurmUnavailableError",
     "submit",
     "list_jobs",
+    "fairshare_scores",
 ]
