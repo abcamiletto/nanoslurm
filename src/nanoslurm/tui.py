@@ -5,7 +5,7 @@ from collections import Counter, defaultdict
 from datetime import timedelta
 
 from textual.app import App, ComposeResult
-from textual.containers import Center
+from textual.containers import Grid, Vertical
 from textual.widgets import DataTable, Footer, Header, TabbedContent, TabPane
 
 from .job import list_jobs
@@ -13,11 +13,31 @@ from .stats import (
     fairshare_scores,
     job_history,
     node_state_counts,
+    partition_node_state_counts,
     partition_utilization,
     recent_completions,
 )
 
-BASE_CSS = ""
+BASE_CSS = """
+Screen {
+    padding: 1;
+}
+#summary-grid {
+    layout: grid;
+    grid-size: 2;
+    grid-gutter: 1;
+}
+#summary-grid DataTable {
+    width: 100%;
+}
+.partition-pane {
+    layout: vertical;
+    gap: 1;
+}
+.partition-pane DataTable {
+    width: 100%;
+}
+"""
 
 
 class JobApp(App):
@@ -31,6 +51,10 @@ class JobApp(App):
         ("k", "cursor_up", "Up"),
         ("l", "cursor_right", "Right"),
     ]
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("ansi_color", True)
+        super().__init__(**kwargs)
 
     def compose(self) -> ComposeResult:  # pragma: no cover - Textual composition
         yield Header()
@@ -71,19 +95,24 @@ class ClusterApp(App):
     CSS = BASE_CSS
     BINDINGS = [("q", "quit", "Quit")]
 
+    def __init__(self, **kwargs):
+        kwargs.setdefault("ansi_color", True)
+        super().__init__(**kwargs)
+
     def compose(self) -> ComposeResult:  # pragma: no cover - Textual composition
         yield Header()
         self.tabs = TabbedContent()
         with self.tabs:
             with TabPane("Summary"):
-                self.node_table = DataTable()
-                self.state_table = DataTable()
-                self.partition_table = DataTable()
-                self.user_table = DataTable()
-                yield Center(self.node_table)
-                yield Center(self.state_table)
-                yield Center(self.partition_table)
-                yield Center(self.user_table)
+                with Grid(id="summary-grid"):
+                    self.partition_table = DataTable()
+                    self.user_table = DataTable()
+                    self.state_table = DataTable()
+                    self.node_table = DataTable()
+                    yield self.partition_table
+                    yield self.user_table
+                    yield self.state_table
+                    yield self.node_table
         yield self.tabs
         yield Footer()
 
@@ -92,9 +121,16 @@ class ClusterApp(App):
         self.state_table.add_columns("State", "Jobs", "Percent")
         self.partition_table.add_columns("Partition", "Jobs", "Running", "Pending", "Share%", "Util%")
         self.user_table.add_columns(
-            "User", "Jobs", "Running", "Pending", "Share%", "FairShare", "Succeeded (24h)", "Failed (24h)"
+            "User",
+            "Jobs",
+            "Running",
+            "Pending",
+            "Share%",
+            "FairShare",
+            "Succeeded (24h)",
+            "Failed (24h)",
         )
-        self.partition_tables: dict[str, DataTable] = {}
+        self.partition_tables: dict[str, dict[str, DataTable]] = {}
         self.refresh_tables()
         self.set_interval(2.0, self.refresh_tables)
 
@@ -120,6 +156,11 @@ class ClusterApp(App):
         except Exception:  # pragma: no cover - runtime environment
             util_map = {}
 
+        try:
+            node_map = partition_node_state_counts()
+        except Exception:  # pragma: no cover - runtime environment
+            node_map = {}
+
         shares = fairshare_scores()
         history = job_history()
 
@@ -144,13 +185,15 @@ class ClusterApp(App):
                 part, str(jobs), str(running), str(pending), f"{share:.1f}%", f"{util:.1f}%"
             )
             if part not in self.partition_tables:
-                table = DataTable()
-                table.add_columns("User", "Jobs", "Running", "Pending", "Share%")
-                pane = TabPane(part, Center(table))
+                stats_table = DataTable()
+                stats_table.add_columns("Metric", "Value")
+                user_table = DataTable()
+                user_table.add_columns("User", "Jobs", "Running", "Pending", "Share%")
+                pane = TabPane(part, Vertical(stats_table, user_table, classes="partition-pane"))
                 self.tabs.add_pane(pane)
-                self.partition_tables[part] = table
+                self.partition_tables[part] = {"stats": stats_table, "users": user_table}
 
-        for part, table in self.partition_tables.items():
+        for part, tables in self.partition_tables.items():
             u_stats: defaultdict[str, Counter] = defaultdict(Counter)
             for job in job_list:
                 if job.partition != part:
@@ -158,13 +201,30 @@ class ClusterApp(App):
                 u_stats[job.user]["jobs"] += 1
                 u_stats[job.user][job.last_status] += 1
             total_part = sum(s["jobs"] for s in u_stats.values()) or 1
-            table.clear()
+            user_table = tables["users"]
+            user_table.clear()
             for user, cnts in sorted(u_stats.items(), key=lambda x: (-x[1]["jobs"], x[0])):
                 jobs = cnts["jobs"]
                 running = cnts.get("RUNNING", 0)
                 pending = cnts.get("PENDING", 0)
                 share = jobs / total_part * 100
-                table.add_row(user, str(jobs), str(running), str(pending), f"{share:.1f}%")
+                user_table.add_row(user, str(jobs), str(running), str(pending), f"{share:.1f}%")
+
+            stats_table = tables["stats"]
+            stats_table.clear()
+            counts = node_map.get(part)
+            if counts:
+                free_nodes = counts.get("IDLE", 0)
+                total_part_nodes = sum(counts.values())
+                stats_table.add_row("free nodes", str(free_nodes))
+                stats_table.add_row("total nodes", str(total_part_nodes))
+            else:
+                stats_table.add_row("free nodes", "unavailable")
+            util = util_map.get(part)
+            if util is not None:
+                stats_table.add_row("util%", f"{util:.1f}%")
+            else:
+                stats_table.add_row("util%", "unavailable")
 
         self.user_table.clear()
         for user, cnts in sorted(user_stats.items(), key=lambda x: (-x[1]["jobs"], x[0]))[:5]:
@@ -192,6 +252,10 @@ class SummaryApp(App):
 
     CSS = BASE_CSS
     BINDINGS = [("q", "quit", "Quit")]
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("ansi_color", True)
+        super().__init__(**kwargs)
 
     def compose(self) -> ComposeResult:  # pragma: no cover - Textual composition
         yield Header()
