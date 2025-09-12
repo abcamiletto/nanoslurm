@@ -8,7 +8,7 @@ import yaml
 from rich.console import Console
 from rich.table import Table
 
-from .backend import submit
+from .job import submit
 from .defaults import (
     CONFIG_PATH,
     DEFAULTS,

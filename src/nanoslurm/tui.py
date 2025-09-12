@@ -8,10 +8,10 @@ from textual.app import App, ComposeResult
 from textual.containers import Center
 from textual.widgets import DataTable, Footer, Header, TabbedContent, TabPane
 
-from .backend import (
+from .job import list_jobs
+from .stats import (
     fairshare_scores,
     job_history,
-    list_jobs,
     node_state_counts,
     partition_utilization,
     recent_completions,
