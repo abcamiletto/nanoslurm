@@ -262,10 +262,10 @@ def _parse_gpu(gres: str) -> int:
 def _partition_caps() -> dict[str, dict[str, int]]:
     """Return total CPUs/GPUs available in each partition."""
     _require("sinfo")
-    out = _run(["sinfo", "-ah", "-o", "%P|%C|%G"], check=False).stdout
+    out = _run(["sinfo", "-ah", "-o", "%P|%C|%G|%D"], check=False).stdout
     caps: dict[str, dict[str, int]] = {}
     for line in out.splitlines():
-        part, c_field, g_field = (line + "||").split("|")[:3]
+        part, c_field, g_field, d_field = (line + "|||").split("|")[:4]
         part = part.rstrip("*")
         cpus = 0
         if c_field:
@@ -273,7 +273,14 @@ def _partition_caps() -> dict[str, dict[str, int]]:
                 cpus = int(c_field.split("/")[-1])
             except ValueError:
                 pass
-        caps[part] = {"cpus": cpus, "gpus": _parse_gpu(g_field)}
+        gpus_per_node = _parse_gpu(g_field)
+        nodes = 0
+        if d_field:
+            try:
+                nodes = int(d_field)
+            except ValueError:
+                pass
+        caps[part] = {"cpus": cpus, "gpus": gpus_per_node * nodes}
     return caps
 
 
