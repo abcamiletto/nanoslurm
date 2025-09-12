@@ -490,6 +490,94 @@ def _parse_datetime(token: str) -> Optional[datetime]:
     return None
 
 
+def job_history() -> dict[str, dict[str, int]]:
+    """Return per-user job completion statistics for the last 24 hours.
+
+    Uses ``sacct`` with an explicit 24-hour window to gather counts of
+    completed and failed jobs for all users. If ``sacct`` is unavailable,
+    an empty mapping is returned.
+    """
+    if not _which("sacct"):
+        return {}
+
+    now = datetime.now()
+    start = now - timedelta(hours=24)
+    cmd = [
+        "sacct",
+        "-a",
+        "-X",
+        "-n",
+        "--parsable2",
+        "-S",
+        start.strftime("%Y-%m-%dT%H:%M:%S"),
+        "-E",
+        now.strftime("%Y-%m-%dT%H:%M:%S"),
+        "-o",
+        "User,State",
+    ]
+    out = _run(cmd, check=False).stdout
+    stats: dict[str, dict[str, int]] = {}
+    for line in out.splitlines():
+        parts = line.split("|")
+        if len(parts) < 2:
+            continue
+        user, state = parts[0], parts[1]
+        if not user:
+            continue
+        token = state.split()[0].split("+")[0].split("(")[0].rstrip("*")
+        entry = stats.setdefault(user, {"completed": 0, "failed": 0})
+        if token == "COMPLETED":
+            entry["completed"] += 1
+        elif token in _TERMINAL:
+            entry["failed"] += 1
+    return stats
+
+
+def recent_completions(span: str = "day", count: int = 7) -> list[tuple[str, int]]:
+    """Return counts of recently completed jobs grouped by *span*.
+
+    Args:
+        span: Group results by ``"day"`` or ``"week"``.
+        count: Number of periods to return.
+
+    Returns:
+        List of (period, job_count) tuples sorted chronologically.
+    """
+    _require("sacct")
+    if span not in {"day", "week"}:
+        raise ValueError("span must be 'day' or 'week'")
+
+    delta = timedelta(days=count if span == "day" else count * 7)
+    start = (datetime.now() - delta).strftime("%Y-%m-%d")
+    cmd = [
+        "sacct",
+        "--state=CD",
+        "--noheader",
+        "--parsable2",
+        "--format=End",
+        f"--starttime={start}",
+        "-X",
+    ]
+    out = _run(cmd, check=False).stdout
+    counts: Counter[str] = Counter()
+    for line in out.splitlines():
+        token = line.strip()
+        if not token:
+            continue
+        try:
+            dt = datetime.strptime(token.split(".")[0], "%Y-%m-%dT%H:%M:%S")
+        except ValueError:
+            continue
+        if span == "week":
+            year, week, _ = dt.isocalendar()
+            key = f"{year}-W{week:02d}"
+        else:
+            key = dt.strftime("%Y-%m-%d")
+        counts[key] += 1
+    items = sorted(counts.items())
+    return items[-count:]
+
+
 def _squeue_status(job_id: int) -> Optional[str]:
     if not _which("squeue"):
         return None
@@ -532,6 +620,7 @@ __all__ = [
     "SlurmUnavailableError",
     "submit",
     "list_jobs",
+    "job_history",
     "fairshare_scores",
     "node_state_counts",
     "partition_utilization",

@@ -8,8 +8,9 @@ from textual.app import App, ComposeResult
 from textual.containers import Center
 from textual.widgets import DataTable, Footer, Header, TabbedContent, TabPane
 
-from .backend import fairshare_scores, list_jobs
+from .backend import job_history, list_jobs, recent_completions
 
+from .backend import fairshare_scores, list_jobs
 from .backend import list_jobs, node_state_counts, recent_completions
 from .backend import list_jobs, partition_utilization, recent_completions
 
@@ -74,11 +75,13 @@ class ClusterApp(App):
         self.partition_tables: dict[str, DataTable] = {}
         with self.tabs:
             with TabPane("Summary"):
+
                 self.node_table = DataTable()
                 self.state_table = DataTable()
                 self.partition_table = DataTable()
                 self.user_table = DataTable()
                 yield Center(self.node_table)
+
                 self.state_table = DataTable()
                 self.partition_table = DataTable()
                 self.user_table = DataTable()
@@ -89,6 +92,18 @@ class ClusterApp(App):
         yield Footer()
 
     def on_mount(self) -> None:  # pragma: no cover - runtime hook
+        self.state_table.add_columns("State", "Jobs", "Share%")
+        self.partition_table.add_columns("Partition", "Jobs", "Running", "Pending", "Share%")
+        self.user_table.add_columns(
+            "User",
+            "Jobs",
+            "Running",
+            "Pending",
+            "Share%",
+            "Succeeded (24h)",
+            "Failed (24h)",
+        )
+
         self.state_table.add_columns("State", "Count", "Percent")
         self.partition_table.add_columns("Partition", "Jobs", "Percent", "Avg Wait")
         self.user_table.add_columns("User", "Jobs", "Percent", "Avg Wait")
@@ -104,6 +119,7 @@ class ClusterApp(App):
 
 
         self.user_table.add_columns("User", "Jobs", "Running", "Pending", "Share%")
+
         self.refresh_tables()
         self.set_interval(2.0, self.refresh_tables)
 
@@ -118,6 +134,7 @@ class ClusterApp(App):
         total = len(job_list) or 1
 
         state_counts = Counter(job.last_status for job in job_list)
+
         part_counts = Counter(job.partition for job in job_list)
         user_counts = Counter(job.user for job in job_list)
         shares = fairshare_scores()
@@ -160,6 +177,8 @@ class ClusterApp(App):
             part[job.last_status] += 1
             usr[job.last_status] += 1
 
+        history = job_history()
+
         self.node_table.clear()
         for state, count, pct in node_rows:
             self.node_table.add_row(state, str(count), f"{pct:.1f}%")
@@ -170,11 +189,45 @@ class ClusterApp(App):
             util_map = {}
 
 
+
         self.state_table.clear()
         for state, cnt in sorted(state_counts.items()):
             self.state_table.add_row(state, str(cnt), f"{cnt / total * 100:.1f}%")
 
         self.partition_table.clear()
+        for part, cnts in sorted(part_stats.items()):
+            jobs = cnts["jobs"]
+            running = cnts.get("RUNNING", 0)
+            pending = cnts.get("PENDING", 0)
+            share = jobs / total * 100
+            self.partition_table.add_row(part, str(jobs), str(running), str(pending), f"{share:.1f}%")
+
+            if part not in self.partition_tables:
+                table = DataTable()
+                table.add_columns("User", "Jobs", "Running", "Pending", "Share%")
+                pane = TabPane(part, Center(table))
+                self.tabs.add_pane(pane)
+                self.partition_tables[part] = table
+
+        for part, table in self.partition_tables.items():
+            u_stats: dict[str, Counter] = {}
+            for job in job_list:
+                if job.partition != part:
+                    continue
+                stats = u_stats.setdefault(job.user, Counter())
+                stats["jobs"] += 1
+                stats[job.last_status] += 1
+            total_part = sum(s["jobs"] for s in u_stats.values()) or 1
+            table.clear()
+            for user, cnts in sorted(u_stats.items(), key=lambda x: (-x[1]["jobs"], x[0])):
+                jobs = cnts["jobs"]
+                running = cnts.get("RUNNING", 0)
+                pending = cnts.get("PENDING", 0)
+                share = jobs / total_part * 100
+                table.add_row(user, str(jobs), str(running), str(pending), f"{share:.1f}%")
+
+        self.user_table.clear()
+        for user, cnts in sorted(user_stats.items(), key=lambda x: (-x[1]["jobs"], x[0])):
         for part, count, pct, avg in part_rows:
             self.partition_table.add_row(part, str(count), f"{pct:.1f}%", _fmt(avg))
         self.user_table.clear()
@@ -185,6 +238,9 @@ class ClusterApp(App):
             running = cnts.get("RUNNING", 0)
             pending = cnts.get("PENDING", 0)
             share = jobs / total * 100
+            hist = history.get(user, {"completed": 0, "failed": 0})
+            self.user_table.add_row(
+                user,
             self.partition_table.add_row(part, str(jobs), str(running), str(pending), f"{share:.1f}%")
 
             util = util_map.get(part, 0.0)
@@ -194,6 +250,10 @@ class ClusterApp(App):
                 str(running),
                 str(pending),
                 f"{share:.1f}%",
+                str(hist.get("completed", 0)),
+                str(hist.get("failed", 0)),
+            )
+
                 f"{util:.1f}%",
             )
 
