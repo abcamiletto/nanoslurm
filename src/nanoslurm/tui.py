@@ -8,9 +8,8 @@ from textual.widgets import DataTable, Footer, Header
 
 from .backend import list_jobs
 
-# Use no custom styling so Textual falls back to its defaults, which allows the
-# TUI to blend in with the user's terminal theme.
 BASE_CSS = ""
+
 
 
 class JobApp(App):
