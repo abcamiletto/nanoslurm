@@ -7,7 +7,8 @@ from textual.app import App, ComposeResult
 from textual.containers import Center
 from textual.widgets import DataTable, Footer, Header, TabbedContent, TabPane
 
-from .backend import list_jobs, recent_completions
+from .backend import list_jobs, partition_utilization, recent_completions
+
 
 BASE_CSS = ""
 
@@ -81,7 +82,11 @@ class ClusterApp(App):
 
     def on_mount(self) -> None:  # pragma: no cover - runtime hook
         self.state_table.add_columns("State", "Jobs", "Share%")
-        self.partition_table.add_columns("Partition", "Jobs", "Running", "Pending", "Share%")
+        self.partition_table.add_columns(
+            "Partition", "Jobs", "Running", "Pending", "Share%", "Util%"
+        )
+
+
         self.user_table.add_columns("User", "Jobs", "Running", "Pending", "Share%")
         self.refresh_tables()
         self.set_interval(2.0, self.refresh_tables)
@@ -102,6 +107,12 @@ class ClusterApp(App):
             part[job.last_status] += 1
             usr[job.last_status] += 1
 
+        try:
+            util_map = partition_utilization()
+        except Exception:  # pragma: no cover - runtime environment
+            util_map = {}
+
+
         self.state_table.clear()
         for state, cnt in sorted(state_counts.items()):
             self.state_table.add_row(state, str(cnt), f"{cnt / total * 100:.1f}%")
@@ -112,7 +123,18 @@ class ClusterApp(App):
             running = cnts.get("RUNNING", 0)
             pending = cnts.get("PENDING", 0)
             share = jobs / total * 100
+            util = util_map.get(part, 0.0)
+            self.partition_table.add_row(
+                part,
+                str(jobs),
+                str(running),
+                str(pending),
+                f"{share:.1f}%",
+                f"{util:.1f}%",
+            )
+
             self.partition_table.add_row(part, str(jobs), str(running), str(pending), f"{share:.1f}%")
+
 
             if part not in self.partition_tables:
                 table = DataTable()
@@ -137,7 +159,6 @@ class ClusterApp(App):
                 pending = cnts.get("PENDING", 0)
                 share = jobs / total_part * 100
                 table.add_row(user, str(jobs), str(running), str(pending), f"{share:.1f}%")
-
         self.user_table.clear()
         for user, cnts in sorted(user_stats.items(), key=lambda x: (-x[1]["jobs"], x[0])):
             jobs = cnts["jobs"]
