@@ -1,40 +1,38 @@
-name: Release
+name: Tag Version
 
 on:
-  workflow_run:
-    workflows: ["Tag Version"]
-    types:
-      - completed
+  push:
+    branches: ["main"]
 
 permissions:
-  contents: read
-  id-token: write
+  contents: write
 
 jobs:
-  publish:
+  tag:
     runs-on: ubuntu-latest
-    environment: pypi
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
       - name: Determine version change
         id: version
         run: |
           new_version=$(grep '^version = ' pyproject.toml | sed -E 's/version = "([^"]+)"/\1/')
+          echo "version=$new_version" >> $GITHUB_OUTPUT
           old_version=$(git show HEAD^:pyproject.toml 2>/dev/null | grep '^version = ' | sed -E 's/version = "([^"]+)"/\1/' || echo "")
           if [ "$new_version" != "$old_version" ]; then
             echo "changed=true" >> $GITHUB_OUTPUT
           else
             echo "changed=false" >> $GITHUB_OUTPUT
           fi
-      - uses: actions/setup-python@v5
+      - name: Create tag
         if: steps.version.outputs.changed == 'true'
-        with:
-          python-version: "3.11"
-      - uses: astral-sh/setup-uv@v3
-        if: steps.version.outputs.changed == 'true'
-      - run: uv build
-        if: steps.version.outputs.changed == 'true'
-      - run: uv publish
-        if: steps.version.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "Tag v${{ steps.version.outputs.version }} already exists"
+          else
+            git tag "v${{ steps.version.outputs.version }}"
+            git push origin "v${{ steps.version.outputs.version }}"
+          fi
