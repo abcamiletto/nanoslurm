@@ -11,10 +11,12 @@ permissions:
   id-token: write
 
 jobs:
-  publish:
+  check:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    environment: pypi
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      exists: ${{ steps.tag.outputs.exists }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,21 +33,26 @@ jobs:
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
-      - run: git checkout "${{ steps.tag.outputs.tag }}"
-        if: steps.tag.outputs.exists == 'true'
+
+  publish:
+    needs: check
+    if: needs.check.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    environment: pypi
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.check.outputs.tag }}
       - uses: astral-sh/setup-uv@v4
-        if: steps.tag.outputs.exists == 'true'
         with:
           python-version: "3.11"
       - run: uv build
-        if: steps.tag.outputs.exists == 'true'
       - run: uv publish --check-url https://pypi.org/simple
-        if: steps.tag.outputs.exists == 'true'
       - name: Create GitHub release
-        if: steps.tag.outputs.exists == 'true'
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          release_name: ${{ steps.tag.outputs.tag }}
+          tag_name: ${{ needs.check.outputs.tag }}
+          release_name: ${{ needs.check.outputs.tag }}
