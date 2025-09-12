@@ -3,9 +3,9 @@ from __future__ import annotations
 import os
 
 from textual.app import App, ComposeResult
-from textual.widgets import DataTable, Footer, Header
+from textual.widgets import DataTable
 
-from .nanoslurm import _run, _which
+from .nanoslurm import SlurmUnavailableError, _run, _which
 
 
 class JobApp(App):
@@ -14,10 +14,8 @@ class JobApp(App):
     BINDINGS = [("q", "quit", "Quit")]
 
     def compose(self) -> ComposeResult:  # pragma: no cover - Textual composition
-        yield Header()
         self.table: DataTable = DataTable()
         yield self.table
-        yield Footer()
 
     def on_mount(self) -> None:  # pragma: no cover - runtime hook
         self.table.add_columns("ID", "Name", "State")
@@ -34,7 +32,7 @@ class JobApp(App):
 def _list_jobs() -> list[tuple[str, str, str]]:
     """Return a list of (id, name, state) for current user's jobs."""
     if not _which("squeue"):
-        return []
+        raise SlurmUnavailableError("squeue command not found on PATH")
     user = os.environ.get("USER", "")
     out = _run(["squeue", "-u", user, "-h", "-o", "%i|%j|%T"], check=False).stdout
     rows: list[tuple[str, str, str]] = []

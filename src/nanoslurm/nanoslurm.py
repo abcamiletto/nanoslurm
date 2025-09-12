@@ -15,6 +15,18 @@ _TERMINAL = {"COMPLETED", "FAILED", "CANCELLED", "TIMEOUT", "PREEMPTED", "BOOT_F
 _RUNNINGISH = {"PENDING", "CONFIGURING", "RUNNING", "COMPLETING", "STAGE_OUT", "SUSPENDED", "RESV_DEL_HOLD"}
 
 
+class SlurmUnavailableError(RuntimeError):
+    """Raised when required SLURM commands are missing."""
+
+
+def _require(cmd: str) -> None:
+    """Ensure *cmd* exists on PATH, otherwise raise ``SlurmUnavailableError``."""
+    if not _which(cmd):
+        raise SlurmUnavailableError(
+            f"Required command '{cmd}' not found. Is this a SLURM environment?"
+        )
+
+
 def submit(
     command: Iterable[str] | str,
     *,
@@ -50,7 +62,9 @@ def submit(
     Raises:
         FileNotFoundError: If run.sh is missing.
         RuntimeError: If job id cannot be parsed from sbatch output.
+        SlurmUnavailableError: If ``sbatch`` is unavailable.
     """
+    _require("sbatch")
     if not RUN_SH.exists():
         raise FileNotFoundError(f"run.sh not found at {RUN_SH}")
 
@@ -134,6 +148,8 @@ class Job:
     @property
     def status(self) -> str:
         """Return SLURM job status."""
+        if not (_which("squeue") or _which("sacct")):
+            raise SlurmUnavailableError("squeue or sacct not found on PATH")
         s = _squeue_status(self.id)
         if s:
             return s
@@ -141,8 +157,7 @@ class Job:
         return s or "UNKNOWN"
 
     def info(self) -> dict[str, str]:
-        if not _which("scontrol"):
-            return {}
+        _require("scontrol")
         out = _run(["scontrol", "-o", "show", "job", str(self.id)], check=False).stdout.strip()
         if not out:
             return {}
@@ -175,8 +190,7 @@ class Job:
 
     def cancel(self) -> None:
         """Cancel the job via scancel."""
-        if not _which("scancel"):
-            raise RuntimeError("scancel not found on PATH")
+        _require("scancel")
         _run(["scancel", str(self.id)], check=False)
 
     def tail(self, n: int = 10) -> str:
