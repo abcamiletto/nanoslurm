@@ -4,8 +4,9 @@ import os
 import shlex
 import subprocess
 import time
+from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterable, Optional, Sequence, Union
 
@@ -246,6 +247,111 @@ def list_jobs(user: Optional[str] = None) -> list[Job]:
     return rows
 
 
+def _parse_gpu(gres: str) -> int:
+    """Extract total GPU count from a SLURM GRES string."""
+    total = 0
+    for token in gres.split(","):
+        token = token.strip().split("(")[0]
+        if token.startswith("gpu:"):
+            try:
+                total += int(token.split(":")[-1])
+            except ValueError:
+                pass
+    return total
+
+
+def _partition_caps() -> dict[str, dict[str, int]]:
+    """Return total CPUs/GPUs available in each partition."""
+    _require("sinfo")
+    out = _run(["sinfo", "-ah", "-o", "%P|%C|%G"], check=False).stdout
+    caps: dict[str, dict[str, int]] = {}
+    for line in out.splitlines():
+        part, c_field, g_field = (line + "||").split("|")[:3]
+        part = part.rstrip("*")
+        cpus = 0
+        if c_field:
+            try:
+                cpus = int(c_field.split("/")[-1])
+            except ValueError:
+                pass
+        caps[part] = {"cpus": cpus, "gpus": _parse_gpu(g_field)}
+    return caps
+
+
+def partition_utilization() -> dict[str, float]:
+    """Return per-partition utilization percentage based on running jobs."""
+    caps = _partition_caps()
+    _require("squeue")
+    out = _run(["squeue", "-h", "-t", "RUNNING", "-o", "%P|%C|%b"], check=False).stdout
+    usage: dict[str, dict[str, int]] = {}
+    for line in out.splitlines():
+        part, c_field, g_field = (line + "||").split("|")[:3]
+        cpus = 0
+        if c_field:
+            try:
+                cpus = int(c_field)
+            except ValueError:
+                pass
+        gpus = _parse_gpu(g_field)
+        u = usage.setdefault(part, {"cpus": 0, "gpus": 0})
+        u["cpus"] += cpus
+        u["gpus"] += gpus
+    utils: dict[str, float] = {}
+    for part, cap in caps.items():
+        use = usage.get(part, {})
+        cpu_total = cap.get("cpus", 0)
+        gpu_total = cap.get("gpus", 0)
+        cpu_pct = use.get("cpus", 0) / cpu_total if cpu_total else 0.0
+        gpu_pct = use.get("gpus", 0) / gpu_total if gpu_total else 0.0
+        utils[part] = max(cpu_pct, gpu_pct) * 100
+    return utils
+
+
+def recent_completions(span: str = "day", count: int = 7) -> list[tuple[str, int]]:
+    """Return counts of recently completed jobs grouped by *span*.
+
+    Args:
+        span: Group results by ``"day"`` or ``"week"``.
+        count: Number of periods to return.
+
+    Returns:
+        List of (period, job_count) tuples sorted chronologically.
+    """
+    _require("sacct")
+    if span not in {"day", "week"}:
+        raise ValueError("span must be 'day' or 'week'")
+
+    delta = timedelta(days=count if span == "day" else count * 7)
+    start = (datetime.now() - delta).strftime("%Y-%m-%d")
+    cmd = [
+        "sacct",
+        "--state=CD",
+        "--noheader",
+        "--parsable2",
+        "--format=End",
+        f"--starttime={start}",
+        "-X",
+    ]
+    out = _run(cmd, check=False).stdout
+    counts: Counter[str] = Counter()
+    for line in out.splitlines():
+        token = line.strip()
+        if not token:
+            continue
+        try:
+            dt = datetime.strptime(token.split(".")[0], "%Y-%m-%dT%H:%M:%S")
+        except ValueError:
+            continue
+        if span == "week":
+            year, week, _ = dt.isocalendar()
+            key = f"{year}-W{week:02d}"
+        else:
+            key = dt.strftime("%Y-%m-%d")
+        counts[key] += 1
+    items = sorted(counts.items())
+    return items[-count:]
+
+
 def _squeue_status(job_id: int) -> Optional[str]:
     if not _which("squeue"):
         return None
@@ -288,4 +394,6 @@ __all__ = [
     "SlurmUnavailableError",
     "submit",
     "list_jobs",
+    "partition_utilization",
+    "recent_completions",
 ]
