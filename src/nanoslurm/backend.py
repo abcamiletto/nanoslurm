@@ -245,6 +245,74 @@ def list_jobs(user: Optional[str] = None) -> list[Job]:
                 )
             )
     return rows
+ 
+def node_state_counts() -> dict[str, int]:
+    """Return a mapping of node state to count.
+
+    Runs ``sinfo`` to obtain node information and aggregates the number of
+    nodes reported in each state. Requires that the ``sinfo`` command is
+    available on ``PATH``.
+    """
+    if not _which("sinfo"):
+        raise SlurmUnavailableError("sinfo command not found on PATH")
+    out = _run(["sinfo", "-h", "-o", "%T|%D"], check=False).stdout
+    counts: Counter[str] = Counter()
+    for line in out.splitlines():
+        parts = line.split("|")
+        if len(parts) != 2:
+            continue
+        state, count = parts
+        token = state.split()[0].split("+")[0].split("(")[0].rstrip("*")
+        try:
+            counts[token] += int(count)
+        except ValueError:
+            continue
+    return dict(counts)
+
+
+def recent_completions(span: str = "day", count: int = 7) -> list[tuple[str, int]]:
+    """Return counts of recently completed jobs grouped by *span*.
+
+    Args:
+        span: Group results by ``"day"`` or ``"week"``.
+        count: Number of periods to return.
+
+    Returns:
+        List of (period, job_count) tuples sorted chronologically.
+    """
+    _require("sacct")
+    if span not in {"day", "week"}:
+        raise ValueError("span must be 'day' or 'week'")
+
+    delta = timedelta(days=count if span == "day" else count * 7)
+    start = (datetime.now() - delta).strftime("%Y-%m-%d")
+    cmd = [
+        "sacct",
+        "--state=CD",
+        "--noheader",
+        "--parsable2",
+        "--format=End",
+        f"--starttime={start}",
+        "-X",
+    ]
+    out = _run(cmd, check=False).stdout
+    counts: Counter[str] = Counter()
+    for line in out.splitlines():
+        token = line.strip()
+        if not token:
+            continue
+        try:
+            dt = datetime.strptime(token.split(".")[0], "%Y-%m-%dT%H:%M:%S")
+        except ValueError:
+            continue
+        if span == "week":
+            year, week, _ = dt.isocalendar()
+            key = f"{year}-W{week:02d}"
+        else:
+            key = dt.strftime("%Y-%m-%d")
+        counts[key] += 1
+    items = sorted(counts.items())
+    return items[-count:]
 
 def _parse_gpu(gres: str) -> int:
     """Extract total GPU count from a SLURM GRES string."""
@@ -394,6 +462,7 @@ __all__ = [
     "SlurmUnavailableError",
     "submit",
     "list_jobs",
+    "node_state_counts",
     "partition_utilization",
     "recent_completions",
 ]

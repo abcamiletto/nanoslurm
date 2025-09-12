@@ -7,8 +7,9 @@ from textual.app import App, ComposeResult
 from textual.containers import Center
 from textual.widgets import DataTable, Footer, Header, TabbedContent, TabPane
 
-from .backend import list_jobs, partition_utilization, recent_completions
+from .backend import list_jobs, node_state_counts, recent_completions
 
+from .backend import list_jobs, partition_utilization, recent_completions
 
 BASE_CSS = ""
 
@@ -71,6 +72,11 @@ class ClusterApp(App):
         self.partition_tables: dict[str, DataTable] = {}
         with self.tabs:
             with TabPane("Summary"):
+                self.node_table = DataTable()
+                self.state_table = DataTable()
+                self.partition_table = DataTable()
+                self.user_table = DataTable()
+                yield Center(self.node_table)
                 self.state_table = DataTable()
                 self.partition_table = DataTable()
                 self.user_table = DataTable()
@@ -81,6 +87,9 @@ class ClusterApp(App):
         yield Footer()
 
     def on_mount(self) -> None:  # pragma: no cover - runtime hook
+        self.node_table.add_columns("State", "Nodes", "Percent")
+        self.state_table.add_columns("State", "Jobs", "Share%")
+        self.partition_table.add_columns("Partition", "Jobs", "Running", "Pending", "Share%")
         self.state_table.add_columns("State", "Jobs", "Share%")
         self.partition_table.add_columns(
             "Partition", "Jobs", "Running", "Pending", "Share%", "Util%"
@@ -92,6 +101,12 @@ class ClusterApp(App):
         self.set_interval(2.0, self.refresh_tables)
 
     def refresh_tables(self) -> None:  # pragma: no cover - runtime hook
+        node_counts = node_state_counts()
+        total_nodes = sum(node_counts.values()) or 1
+        node_rows = sorted(
+            (state, cnt, round(cnt / total_nodes * 100, 1)) for state, cnt in node_counts.items()
+        )
+
         job_list = list_jobs()
         total = len(job_list) or 1
 
@@ -107,11 +122,14 @@ class ClusterApp(App):
             part[job.last_status] += 1
             usr[job.last_status] += 1
 
+        self.node_table.clear()
+        for state, count, pct in node_rows:
+            self.node_table.add_row(state, str(count), f"{pct:.1f}%")
+
         try:
             util_map = partition_utilization()
         except Exception:  # pragma: no cover - runtime environment
             util_map = {}
-
 
         self.state_table.clear()
         for state, cnt in sorted(state_counts.items()):
@@ -123,6 +141,8 @@ class ClusterApp(App):
             running = cnts.get("RUNNING", 0)
             pending = cnts.get("PENDING", 0)
             share = jobs / total * 100
+            self.partition_table.add_row(part, str(jobs), str(running), str(pending), f"{share:.1f}%")
+
             util = util_map.get(part, 0.0)
             self.partition_table.add_row(
                 part,
@@ -159,6 +179,7 @@ class ClusterApp(App):
                 pending = cnts.get("PENDING", 0)
                 share = jobs / total_part * 100
                 table.add_row(user, str(jobs), str(running), str(pending), f"{share:.1f}%")
+
         self.user_table.clear()
         for user, cnts in sorted(user_stats.items(), key=lambda x: (-x[1]["jobs"], x[0])):
             jobs = cnts["jobs"]
