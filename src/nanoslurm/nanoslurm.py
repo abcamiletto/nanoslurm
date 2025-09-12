@@ -18,12 +18,12 @@ _RUNNINGISH = {"PENDING", "CONFIGURING", "RUNNING", "COMPLETING", "STAGE_OUT", "
 def submit(
     command: Iterable[str] | str,
     *,
-    name: str = "default_job",
+    name: str = "job",
     cluster: str,
-    time: str = "11:59:00",
-    cpus: int = 16,
-    memory: int = 64,
-    gpus: int = 1,
+    time: str,
+    cpus: int,
+    memory: int,
+    gpus: int,
     stdout_file: Union[str, Path] = "./slurm_logs/%j.txt",
     stderr_file: Union[str, Path] = "./slurm_logs/%j.err",
     signal: str = "SIGUSR1@90",
@@ -34,11 +34,11 @@ def submit(
     Args:
         command: Command to execute on the node. List (preferred) or raw shell string.
         name: Base job name; a timestamp suffix is appended for uniqueness.
-        cluster: SLURM partition.
-        time: Time limit in HH:MM:SS.
-        cpus: CPU cores.
-        memory: Memory in GB.
-        gpus: Number of GPUs.
+        cluster: SLURM partition (required).
+        time: Time limit in HH:MM:SS (required).
+        cpus: CPU cores (required).
+        memory: Memory in GB (required).
+        gpus: Number of GPUs (required).
         stdout_file: Stdout path (supports %j).
         stderr_file: Stderr path (supports %j).
         signal: SBATCH --signal (e.g., "SIGUSR1@90").

@@ -48,3 +48,36 @@ job.wait(poll_interval=5)       # Wait until completion
 job.cancel()                    # Cancel job
 
 ```
+
+## Command line interface
+
+Install the CLI with [uv](https://github.com/astral-sh/uv):
+
+```bash
+uv tool install nanoslurm
+```
+
+Submit a job from the terminal:
+
+```bash
+nslurm run -c gpu22 -t 01:00:00 -p 4 -m 16 -g 1 -- python train.py --epochs 10
+```
+
+Launch an interactive prompt to build a command and adjust options:
+
+```bash
+nslurm run -i
+```
+
+Manage persistent defaults (stored as YAML via `platformdirs`):
+
+```bash
+nslurm defaults show            # list current defaults
+nslurm defaults set cluster gpu22
+nslurm defaults reset
+nslurm defaults edit            # open the YAML config in $EDITOR
+```
+
+Most job parameters (such as cluster, time, or resource counts) have no built-in
+defaults. Set them explicitly on the command line or persist them via
+`nslurm defaults set`.
