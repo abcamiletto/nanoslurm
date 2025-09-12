@@ -90,7 +90,7 @@ nslurm jobs
 
 Use the arrow keys or `h`, `j`, `k`, `l` to move around and `q` to quit.
 
-View cluster-wide statistics such as job states, top users, and job counts by
+View cluster-wide statistics such as node states, job states, top users, and job counts by
 partition with counts and percentages:
 
 ```bash

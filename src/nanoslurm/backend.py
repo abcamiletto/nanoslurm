@@ -4,6 +4,7 @@ import os
 import shlex
 import subprocess
 import time
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -246,6 +247,30 @@ def list_jobs(user: Optional[str] = None) -> list[Job]:
     return rows
 
 
+def node_state_counts() -> dict[str, int]:
+    """Return a mapping of node state to count.
+
+    Runs ``sinfo`` to obtain node information and aggregates the number of
+    nodes reported in each state. Requires that the ``sinfo`` command is
+    available on ``PATH``.
+    """
+    if not _which("sinfo"):
+        raise SlurmUnavailableError("sinfo command not found on PATH")
+    out = _run(["sinfo", "-h", "-o", "%T|%D"], check=False).stdout
+    counts: Counter[str] = Counter()
+    for line in out.splitlines():
+        parts = line.split("|")
+        if len(parts) != 2:
+            continue
+        state, count = parts
+        token = state.split()[0].split("+")[0].split("(")[0].rstrip("*")
+        try:
+            counts[token] += int(count)
+        except ValueError:
+            continue
+    return dict(counts)
+
+
 def _squeue_status(job_id: int) -> Optional[str]:
     if not _which("squeue"):
         return None
@@ -288,4 +313,5 @@ __all__ = [
     "SlurmUnavailableError",
     "submit",
     "list_jobs",
+    "node_state_counts",
 ]

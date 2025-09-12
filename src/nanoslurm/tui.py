@@ -6,7 +6,7 @@ from collections import Counter
 from textual.app import App, ComposeResult
 from textual.widgets import DataTable, Footer, Header
 
-from .backend import list_jobs
+from .backend import list_jobs, node_state_counts
 
 BASE_CSS = ""
 
@@ -65,6 +65,8 @@ class ClusterApp(App):
 
     def compose(self) -> ComposeResult:  # pragma: no cover - Textual composition
         yield Header()
+        self.node_table: DataTable = DataTable()
+        yield self.node_table
         self.state_table: DataTable = DataTable()
         yield self.state_table
         self.partition_table: DataTable = DataTable()
@@ -74,6 +76,7 @@ class ClusterApp(App):
         yield Footer()
 
     def on_mount(self) -> None:  # pragma: no cover - runtime hook
+        self.node_table.add_columns("State", "Nodes", "Percent")
         self.state_table.add_columns("State", "Count", "Percent")
         self.partition_table.add_columns("Partition", "Jobs", "Percent")
         self.user_table.add_columns("User", "Jobs", "Percent")
@@ -81,6 +84,12 @@ class ClusterApp(App):
         self.set_interval(2.0, self.refresh_tables)
 
     def refresh_tables(self) -> None:  # pragma: no cover - runtime hook
+        node_counts = node_state_counts()
+        total_nodes = sum(node_counts.values()) or 1
+        node_rows = sorted(
+            (state, cnt, round(cnt / total_nodes * 100, 1)) for state, cnt in node_counts.items()
+        )
+
         job_list = list_jobs()
         total = len(job_list) or 1
         state_counts = Counter(job.last_status for job in job_list)
@@ -97,6 +106,9 @@ class ClusterApp(App):
         for user, cnt in sorted(user_counts.items(), key=lambda x: (-x[1], x[0]))[:5]:
             user_rows.append((user, cnt, round(cnt / total * 100, 1)))
 
+        self.node_table.clear()
+        for state, count, pct in node_rows:
+            self.node_table.add_row(state, str(count), f"{pct:.1f}%")
         self.state_table.clear()
         for state, count, pct in state_rows:
             self.state_table.add_row(state, str(count), f"{pct:.1f}%")
