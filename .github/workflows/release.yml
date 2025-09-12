@@ -1,22 +1,49 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_run:
+    workflows: ["Tag version"]
+    types:
+      - completed
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 jobs:
   publish:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     environment: pypi
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
       - uses: astral-sh/setup-uv@v4
         with:
           python-version: "3.11"
+      - name: Get version
+        id: version
+        run: |
+          echo "version=$(uv version --short)" >> "$GITHUB_OUTPUT"
+      - name: Check tag exists
+        id: tag
+        run: |
+          git fetch --tags
+          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
       - run: uv build
+        if: steps.tag.outputs.exists == 'true'
       - run: uv publish --check-url https://pypi.org/simple
+        if: steps.tag.outputs.exists == 'true'
+      - name: Create GitHub release
+        if: steps.tag.outputs.exists == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          files: dist/*
