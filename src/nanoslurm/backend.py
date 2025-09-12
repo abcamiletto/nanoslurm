@@ -124,6 +124,8 @@ def submit(
     return Job(
         id=job_id,
         name=full_name,
+        user=os.environ.get("USER", ""),
+        partition=cluster,
         stdout_path=Path(str(stdout_file).replace("%j", str(job_id))),
         stderr_path=Path(str(stderr_file).replace("%j", str(job_id))),
     )
@@ -135,8 +137,11 @@ class Job:
 
     id: int
     name: str
+    user: str
+    partition: str
     stdout_path: Optional[Path]
     stderr_path: Optional[Path]
+    last_status: Optional[str] = None
 
     @property
     def output_file(self) -> Optional[Path]:
@@ -145,26 +150,25 @@ class Job:
 
     @property
     def status(self) -> str:
-        """Return SLURM job status."""
+        """Return the current SLURM job status."""
         if not (_which("squeue") or _which("sacct")):
             raise SlurmUnavailableError("squeue or sacct not found on PATH")
         s = _squeue_status(self.id)
-        if s:
-            return s
-        s = _sacct_status(self.id)
-        return s or "UNKNOWN"
+        if not s:
+            s = _sacct_status(self.id)
+        s = s or "UNKNOWN"
+        self.last_status = s
+        return s
 
     def info(self) -> dict[str, str]:
         _require("scontrol")
         out = _run(["scontrol", "-o", "show", "job", str(self.id)], check=False).stdout.strip()
-        if not out:
-            return {}
-
         info: dict[str, str] = {}
-        for token in out.split():
-            if "=" in token:
-                k, v = token.split("=", 1)
-                info[k] = v
+        if out:
+            for token in out.split():
+                if "=" in token:
+                    k, v = token.split("=", 1)
+                    info[k] = v
         return info
 
     def is_running(self) -> bool:
@@ -206,6 +210,42 @@ class Job:
         raise FileNotFoundError(f"stdout file not found at: {self.stdout_path}")
 
 
+def list_jobs(user: Optional[str] = None) -> list[Job]:
+    """List SLURM jobs as :class:`Job` instances.
+
+    Args:
+        user: If provided, limit to jobs belonging to *user*.
+    """
+    if not _which("squeue"):
+        raise SlurmUnavailableError("squeue command not found on PATH")
+    cmd = ["squeue", "-h", "-o", "%i|%j|%u|%P|%T"]
+    if user:
+        cmd.extend(["-u", user])
+    out = _run(cmd, check=False).stdout
+    rows: list[Job] = []
+    for line in out.splitlines():
+        parts = line.split("|")
+        if len(parts) == 5:
+            jid, name, usr, part, status = parts
+            try:
+                jid_int = int(jid)
+            except ValueError:
+                continue
+            token = status.split()[0].split("+")[0].split("(")[0].rstrip("*")
+            rows.append(
+                Job(
+                    id=jid_int,
+                    name=name,
+                    user=usr,
+                    partition=part,
+                    stdout_path=None,
+                    stderr_path=None,
+                    last_status=token,
+                )
+            )
+    return rows
+
+
 def _squeue_status(job_id: int) -> Optional[str]:
     if not _which("squeue"):
         return None
@@ -241,3 +281,11 @@ def _which(name: str) -> bool:
 
 def _timestamp_ms() -> str:
     return datetime.now().strftime("%Y-%m-%d_%H-%M-%S.%f")[:-3]
+
+
+__all__ = [
+    "Job",
+    "SlurmUnavailableError",
+    "submit",
+    "list_jobs",
+]

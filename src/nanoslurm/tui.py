@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import os
+from collections import Counter
 
 from textual.app import App, ComposeResult
 from textual.widgets import DataTable, Footer, Header
 
-from .nanoslurm import SlurmUnavailableError, _run, _which
+from .backend import list_jobs
 
 # Use a minimal style that respects the user's terminal colors.  By default
 # Textual sets a dark theme that overrides the terminal background which makes
@@ -74,10 +75,10 @@ class JobApp(App):
         self.table.action_cursor_down()
 
     def refresh_table(self) -> None:  # pragma: no cover - runtime hook
-        rows = _list_jobs()
+        rows = list_jobs(os.environ.get("USER"))
         self.table.clear()
-        for row in rows:
-            self.table.add_row(*row)
+        for job in rows:
+            self.table.add_row(str(job.id), job.name, job.last_status or job.status)
 
 
 class ClusterApp(App):
@@ -106,84 +107,31 @@ class ClusterApp(App):
         self.set_interval(2.0, self.refresh_tables)
 
     def refresh_tables(self) -> None:  # pragma: no cover - runtime hook
-        states = _cluster_job_state_counts()
-        partitions = _cluster_partition_counts()
-        users = _cluster_top_users()
+        job_list = list_jobs()
+        total = len(job_list) or 1
+        state_counts = Counter(job.last_status for job in job_list)
+        part_counts = Counter(job.partition for job in job_list)
+        user_counts = Counter(job.user for job in job_list)
+
+        state_rows = sorted(
+            (state, cnt, round(cnt / total * 100, 1)) for state, cnt in state_counts.items()
+        )
+        part_rows = sorted(
+            (part, cnt, round(cnt / total * 100, 1)) for part, cnt in part_counts.items()
+        )
+        user_rows = []
+        for user, cnt in sorted(user_counts.items(), key=lambda x: (-x[1], x[0]))[:5]:
+            user_rows.append((user, cnt, round(cnt / total * 100, 1)))
+
         self.state_table.clear()
-        for state, count, pct in states:
+        for state, count, pct in state_rows:
             self.state_table.add_row(state, str(count), f"{pct:.1f}%")
         self.partition_table.clear()
-        for part, count, pct in partitions:
+        for part, count, pct in part_rows:
             self.partition_table.add_row(part, str(count), f"{pct:.1f}%")
         self.user_table.clear()
-        for user, count, pct in users:
+        for user, count, pct in user_rows:
             self.user_table.add_row(user, str(count), f"{pct:.1f}%")
-
-
-def _list_jobs() -> list[tuple[str, str, str]]:
-    """Return a list of (id, name, state) for current user's jobs."""
-    if not _which("squeue"):
-        raise SlurmUnavailableError("squeue command not found on PATH")
-    user = os.environ.get("USER", "")
-    out = _run(["squeue", "-u", user, "-h", "-o", "%i|%j|%T"], check=False).stdout
-    rows: list[tuple[str, str, str]] = []
-    for line in out.splitlines():
-        parts = line.split("|")
-        if len(parts) == 3:
-            rows.append(tuple(parts))
-    return rows
-
-
-def _cluster_job_state_counts() -> list[tuple[str, int, float]]:
-    """Return a list of (state, count, percent) for all jobs on the cluster."""
-    if not _which("squeue"):
-        raise SlurmUnavailableError("squeue command not found on PATH")
-    out = _run(["squeue", "-h", "-o", "%T"], check=False).stdout
-    counts: dict[str, int] = {}
-    for line in out.splitlines():
-        line = line.strip()
-        if line:
-            counts[line] = counts.get(line, 0) + 1
-    total = sum(counts.values()) or 1
-    return sorted(
-        [(state, count, round(count / total * 100, 1)) for state, count in counts.items()],
-        key=lambda x: x[0],
-    )
-
-
-def _cluster_top_users(limit: int = 5) -> list[tuple[str, int, float]]:
-    """Return the top users by job count."""
-    if not _which("squeue"):
-        raise SlurmUnavailableError("squeue command not found on PATH")
-    out = _run(["squeue", "-h", "-o", "%u"], check=False).stdout
-    counts: dict[str, int] = {}
-    for line in out.splitlines():
-        line = line.strip()
-        if line:
-            counts[line] = counts.get(line, 0) + 1
-    total = sum(counts.values()) or 1
-    items = sorted(counts.items(), key=lambda x: (-x[1], x[0]))
-    result: list[tuple[str, int, float]] = []
-    for user, count in items[:limit]:
-        result.append((user, count, round(count / total * 100, 1)))
-    return result
-
-
-def _cluster_partition_counts() -> list[tuple[str, int, float]]:
-    """Return a list of (partition, count, percent) for all jobs."""
-    if not _which("squeue"):
-        raise SlurmUnavailableError("squeue command not found on PATH")
-    out = _run(["squeue", "-h", "-o", "%P"], check=False).stdout
-    counts: dict[str, int] = {}
-    for line in out.splitlines():
-        line = line.strip()
-        if line:
-            counts[line] = counts.get(line, 0) + 1
-    total = sum(counts.values()) or 1
-    return sorted(
-        [(part, count, round(count / total * 100, 1)) for part, count in counts.items()],
-        key=lambda x: x[0],
-    )
 
 
 __all__ = ["JobApp", "ClusterApp"]

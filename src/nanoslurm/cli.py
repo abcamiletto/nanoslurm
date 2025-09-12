@@ -8,6 +8,7 @@ import yaml
 from rich.console import Console
 from rich.table import Table
 
+from .backend import submit
 from .defaults import (
     CONFIG_PATH,
     DEFAULTS,
@@ -16,7 +17,6 @@ from .defaults import (
     load_defaults,
     save_defaults,
 )
-from .nanoslurm import submit
 
 app = typer.Typer(help="Submit and manage jobs with nanoslurm")
 console = Console()
