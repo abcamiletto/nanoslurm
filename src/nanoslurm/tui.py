@@ -4,7 +4,8 @@ import os
 from collections import Counter
 
 from textual.app import App, ComposeResult
-from textual.widgets import DataTable, Footer, Header
+from textual.containers import Center
+from textual.widgets import DataTable, Footer, Header, TabbedContent, TabPane
 
 from .backend import list_jobs
 
@@ -65,47 +66,85 @@ class ClusterApp(App):
 
     def compose(self) -> ComposeResult:  # pragma: no cover - Textual composition
         yield Header()
-        self.state_table: DataTable = DataTable()
-        yield self.state_table
-        self.partition_table: DataTable = DataTable()
-        yield self.partition_table
-        self.user_table: DataTable = DataTable()
-        yield self.user_table
+        self.tabs = TabbedContent()
+        self.partition_tables: dict[str, DataTable] = {}
+        with self.tabs:
+            with TabPane("Summary"):
+                self.state_table = DataTable()
+                self.partition_table = DataTable()
+                self.user_table = DataTable()
+                yield Center(self.state_table)
+                yield Center(self.partition_table)
+                yield Center(self.user_table)
+        yield self.tabs
         yield Footer()
 
     def on_mount(self) -> None:  # pragma: no cover - runtime hook
-        self.state_table.add_columns("State", "Count", "Percent")
-        self.partition_table.add_columns("Partition", "Jobs", "Percent")
-        self.user_table.add_columns("User", "Jobs", "Percent")
+        self.state_table.add_columns("State", "Jobs", "Share%")
+        self.partition_table.add_columns("Partition", "Jobs", "Running", "Pending", "Share%")
+        self.user_table.add_columns("User", "Jobs", "Running", "Pending", "Share%")
         self.refresh_tables()
         self.set_interval(2.0, self.refresh_tables)
 
     def refresh_tables(self) -> None:  # pragma: no cover - runtime hook
         job_list = list_jobs()
         total = len(job_list) or 1
-        state_counts = Counter(job.last_status for job in job_list)
-        part_counts = Counter(job.partition for job in job_list)
-        user_counts = Counter(job.user for job in job_list)
 
-        state_rows = sorted(
-            (state, cnt, round(cnt / total * 100, 1)) for state, cnt in state_counts.items()
-        )
-        part_rows = sorted(
-            (part, cnt, round(cnt / total * 100, 1)) for part, cnt in part_counts.items()
-        )
-        user_rows = []
-        for user, cnt in sorted(user_counts.items(), key=lambda x: (-x[1], x[0]))[:5]:
-            user_rows.append((user, cnt, round(cnt / total * 100, 1)))
+        state_counts = Counter(job.last_status for job in job_list)
+
+        part_stats: dict[str, Counter] = {}
+        user_stats: dict[str, Counter] = {}
+        for job in job_list:
+            part = part_stats.setdefault(job.partition, Counter())
+            usr = user_stats.setdefault(job.user, Counter())
+            part["jobs"] += 1
+            usr["jobs"] += 1
+            part[job.last_status] += 1
+            usr[job.last_status] += 1
 
         self.state_table.clear()
-        for state, count, pct in state_rows:
-            self.state_table.add_row(state, str(count), f"{pct:.1f}%")
+        for state, cnt in sorted(state_counts.items()):
+            self.state_table.add_row(state, str(cnt), f"{cnt / total * 100:.1f}%")
+
         self.partition_table.clear()
-        for part, count, pct in part_rows:
-            self.partition_table.add_row(part, str(count), f"{pct:.1f}%")
+        for part, cnts in sorted(part_stats.items()):
+            jobs = cnts["jobs"]
+            running = cnts.get("RUNNING", 0)
+            pending = cnts.get("PENDING", 0)
+            share = jobs / total * 100
+            self.partition_table.add_row(part, str(jobs), str(running), str(pending), f"{share:.1f}%")
+
+            if part not in self.partition_tables:
+                table = DataTable()
+                table.add_columns("User", "Jobs", "Running", "Pending", "Share%")
+                pane = TabPane(part, Center(table))
+                self.tabs.add_pane(pane)
+                self.partition_tables[part] = table
+
+        for part, table in self.partition_tables.items():
+            u_stats: dict[str, Counter] = {}
+            for job in job_list:
+                if job.partition != part:
+                    continue
+                stats = u_stats.setdefault(job.user, Counter())
+                stats["jobs"] += 1
+                stats[job.last_status] += 1
+            total_part = sum(s["jobs"] for s in u_stats.values()) or 1
+            table.clear()
+            for user, cnts in sorted(u_stats.items(), key=lambda x: (-x[1]["jobs"], x[0])):
+                jobs = cnts["jobs"]
+                running = cnts.get("RUNNING", 0)
+                pending = cnts.get("PENDING", 0)
+                share = jobs / total_part * 100
+                table.add_row(user, str(jobs), str(running), str(pending), f"{share:.1f}%")
+
         self.user_table.clear()
-        for user, count, pct in user_rows:
-            self.user_table.add_row(user, str(count), f"{pct:.1f}%")
+        for user, cnts in sorted(user_stats.items(), key=lambda x: (-x[1]["jobs"], x[0])):
+            jobs = cnts["jobs"]
+            running = cnts.get("RUNNING", 0)
+            pending = cnts.get("PENDING", 0)
+            share = jobs / total * 100
+            self.user_table.add_row(user, str(jobs), str(running), str(pending), f"{share:.1f}%")
 
 
 __all__ = ["JobApp", "ClusterApp"]
