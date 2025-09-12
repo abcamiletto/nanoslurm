@@ -87,15 +87,11 @@ def jobs() -> None:
 
 
 @app.command("stats")
-def stats(
-    clusters: Optional[str] = typer.Option(
-        None, "--clusters", help="Comma-separated cluster names"
-    )
-) -> None:
+def stats() -> None:
     """Launch a Textual TUI to view cluster-wide statistics."""
     from .tui import ClusterApp
 
-    ClusterApp(clusters=clusters).run()
+    ClusterApp().run()
 
 
 defaults_app = typer.Typer(help="Manage default settings")
