@@ -2,43 +2,50 @@ name: Release
 
 on:
   workflow_run:
-    workflows: ["Tag Version"]
+    workflows: ["Tag version"]
     types:
       - completed
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 jobs:
   publish:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     environment: pypi
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Check for tag on commit
+        id: tag
+        run: |
+          git fetch --tags
+          tag=$(git tag --points-at ${{ github.event.workflow_run.head_sha }} | grep '^v' | head -n 1)
+          if [ -n "$tag" ]; then
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - run: git checkout "${{ steps.tag.outputs.tag }}"
+        if: steps.tag.outputs.exists == 'true'
       - uses: astral-sh/setup-uv@v4
+        if: steps.tag.outputs.exists == 'true'
         with:
           python-version: "3.11"
-      - name: Determine version change
-        id: version
-        run: |
-          new_version=$(uv version --short)
-          echo "version=$new_version" >> "$GITHUB_OUTPUT"
-          tmp_dir=$(mktemp -d)
-          git show HEAD^:pyproject.toml 2>/dev/null > "$tmp_dir/pyproject.toml" || true
-          if [ -s "$tmp_dir/pyproject.toml" ]; then
-            old_version=$(uv version --short --project "$tmp_dir")
-          else
-            old_version=""
-          fi
-          if [ "$new_version" != "$old_version" ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          fi
       - run: uv build
-        if: steps.version.outputs.changed == 'true'
+        if: steps.tag.outputs.exists == 'true'
       - run: uv publish --check-url https://pypi.org/simple
-        if: steps.version.outputs.changed == 'true'
+        if: steps.tag.outputs.exists == 'true'
+      - name: Create GitHub release
+        if: steps.tag.outputs.exists == 'true'
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          release_name: ${{ steps.tag.outputs.tag }}
