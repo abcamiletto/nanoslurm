@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import os
-from collections import Counter
+from collections import Counter, defaultdict
+from datetime import timedelta
 
 from textual.app import App, ComposeResult
 from textual.containers import Center
@@ -89,6 +90,8 @@ class ClusterApp(App):
 
     def on_mount(self) -> None:  # pragma: no cover - runtime hook
         self.state_table.add_columns("State", "Count", "Percent")
+        self.partition_table.add_columns("Partition", "Jobs", "Percent", "Avg Wait")
+        self.user_table.add_columns("User", "Jobs", "Percent", "Avg Wait")
         self.partition_table.add_columns("Partition", "Jobs", "Percent")
         self.user_table.add_columns("User", "Jobs", "Percent", "FairShare")
         self.node_table.add_columns("State", "Nodes", "Percent")
@@ -119,14 +122,30 @@ class ClusterApp(App):
         user_counts = Counter(job.user for job in job_list)
         shares = fairshare_scores()
 
+        part_waits: defaultdict[str, list[float]] = defaultdict(list)
+        user_waits: defaultdict[str, list[float]] = defaultdict(list)
+        for job in job_list:
+            if job.wait_time is not None:
+                part_waits[job.partition].append(job.wait_time)
+                user_waits[job.user].append(job.wait_time)
+
         state_rows = sorted(
             (state, cnt, round(cnt / total * 100, 1)) for state, cnt in state_counts.items()
         )
-        part_rows = sorted(
-            (part, cnt, round(cnt / total * 100, 1)) for part, cnt in part_counts.items()
-        )
+        part_rows = []
+        for part, cnt in part_counts.items():
+            waits = part_waits.get(part)
+            avg = sum(waits) / len(waits) if waits else None
+            part_rows.append((part, cnt, round(cnt / total * 100, 1), avg))
+        part_rows.sort()
         user_rows = []
         for user, cnt in sorted(user_counts.items(), key=lambda x: (-x[1], x[0]))[:5]:
+            waits = user_waits.get(user)
+            avg = sum(waits) / len(waits) if waits else None
+            user_rows.append((user, cnt, round(cnt / total * 100, 1), avg))
+
+        def _fmt(seconds: float | None) -> str:
+            return "-" if seconds is None else str(timedelta(seconds=int(seconds)))
             fs = shares.get(user)
             user_rows.append((user, cnt, round(cnt / total * 100, 1), fs))
 
@@ -156,6 +175,11 @@ class ClusterApp(App):
             self.state_table.add_row(state, str(cnt), f"{cnt / total * 100:.1f}%")
 
         self.partition_table.clear()
+        for part, count, pct, avg in part_rows:
+            self.partition_table.add_row(part, str(count), f"{pct:.1f}%", _fmt(avg))
+        self.user_table.clear()
+        for user, count, pct, avg in user_rows:
+            self.user_table.add_row(user, str(count), f"{pct:.1f}%", _fmt(avg))
         for part, cnts in sorted(part_stats.items()):
             jobs = cnts["jobs"]
             running = cnts.get("RUNNING", 0)

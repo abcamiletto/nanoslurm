@@ -142,6 +142,8 @@ class Job:
     partition: str
     stdout_path: Optional[Path]
     stderr_path: Optional[Path]
+    submit_time: Optional[datetime] = None
+    start_time: Optional[datetime] = None
     last_status: Optional[str] = None
 
     @property
@@ -160,6 +162,13 @@ class Job:
         s = s or "UNKNOWN"
         self.last_status = s
         return s
+
+    @property
+    def wait_time(self) -> Optional[float]:
+        """Return the wait time in seconds between submission and start."""
+        if self.submit_time and self.start_time:
+            return (self.start_time - self.submit_time).total_seconds()
+        return None
 
     def info(self) -> dict[str, str]:
         _require("scontrol")
@@ -217,17 +226,32 @@ def list_jobs(user: Optional[str] = None) -> list[Job]:
     Args:
         user: If provided, limit to jobs belonging to *user*.
     """
-    if not _which("squeue"):
-        raise SlurmUnavailableError("squeue command not found on PATH")
-    cmd = ["squeue", "-h", "-o", "%i|%j|%u|%P|%T"]
-    if user:
-        cmd.extend(["-u", user])
+    if not (_which("squeue") or _which("sacct")):
+        raise SlurmUnavailableError("squeue or sacct command not found on PATH")
+
+    use_squeue = _which("squeue")
+    if use_squeue:
+        cmd = ["squeue", "-h", "-o", "%i|%j|%u|%P|%T|%V|%S"]
+        if user:
+            cmd.extend(["-u", user])
+    else:
+        cmd = [
+            "sacct",
+            "-n",
+            "-o",
+            "JobIDRaw,JobName,User,Partition,State,Submit,Start",
+            "--parsable2",
+            "-X",
+        ]
+        if user:
+            cmd.extend(["-u", user])
+
     out = _run(cmd, check=False).stdout
     rows: list[Job] = []
     for line in out.splitlines():
         parts = line.split("|")
-        if len(parts) == 5:
-            jid, name, usr, part, status = parts
+        if len(parts) == 7:
+            jid, name, usr, part, status, submit, start = parts
             try:
                 jid_int = int(jid)
             except ValueError:
@@ -241,6 +265,8 @@ def list_jobs(user: Optional[str] = None) -> list[Job]:
                     partition=part,
                     stdout_path=None,
                     stderr_path=None,
+                    submit_time=_parse_datetime(submit),
+                    start_time=_parse_datetime(start),
                     last_status=token,
                 )
             )
@@ -447,6 +473,21 @@ def fairshare_scores() -> dict[str, float]:
             except ValueError:
                 continue
     return scores
+
+
+def _parse_datetime(token: str) -> Optional[datetime]:
+    token = token.strip()
+    if not token or token in {"N/A", "Unknown"}:
+        return None
+    try:
+        return datetime.fromisoformat(token)
+    except ValueError:
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
+            try:
+                return datetime.strptime(token, fmt)
+            except ValueError:
+                pass
+    return None
 
 
 def _squeue_status(job_id: int) -> Optional[str]:
