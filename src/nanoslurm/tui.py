@@ -8,6 +8,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Center
 from textual.widgets import DataTable, Footer, Header, TabbedContent, TabPane
 
+from .backend import list_jobs, partition_utilization
 from .backend import job_history, list_jobs, recent_completions
 
 from .backend import fairshare_scores, list_jobs
@@ -105,6 +106,9 @@ class ClusterApp(App):
         )
 
         self.state_table.add_columns("State", "Count", "Percent")
+        self.partition_table.add_columns("Partition", "Jobs", "Percent", "Util%")
+        self.user_table.add_columns("User", "Jobs", "Percent")
+
         self.partition_table.add_columns("Partition", "Jobs", "Percent", "Avg Wait")
         self.user_table.add_columns("User", "Jobs", "Percent", "Avg Wait")
         self.partition_table.add_columns("Partition", "Jobs", "Percent")
@@ -149,6 +153,14 @@ class ClusterApp(App):
         state_rows = sorted(
             (state, cnt, round(cnt / total * 100, 1)) for state, cnt in state_counts.items()
         )
+        part_rows = sorted(
+            (part, cnt, round(cnt / total * 100, 1)) for part, cnt in part_counts.items()
+        )
+        try:
+            util_map = partition_utilization()
+        except Exception:  # pragma: no cover - runtime environment
+            util_map = {}
+
         part_rows = []
         for part, cnt in part_counts.items():
             waits = part_waits.get(part)
@@ -195,6 +207,9 @@ class ClusterApp(App):
             self.state_table.add_row(state, str(cnt), f"{cnt / total * 100:.1f}%")
 
         self.partition_table.clear()
+        for part, count, pct in part_rows:
+            util = util_map.get(part, 0.0)
+            self.partition_table.add_row(part, str(count), f"{pct:.1f}%", f"{util:.1f}%")
         for part, cnts in sorted(part_stats.items()):
             jobs = cnts["jobs"]
             running = cnts.get("RUNNING", 0)

@@ -90,6 +90,7 @@ nslurm jobs
 
 Use the arrow keys or `h`, `j`, `k`, `l` to move around and `q` to quit.
 
+
 View cluster-wide statistics with a summary overview and per-partition tabs.
 The TUI shows node states, job states, user activity, and job counts by partition with percentages:
 
