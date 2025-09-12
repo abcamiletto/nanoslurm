@@ -78,7 +78,7 @@ class JobApp(App):
         rows = list_jobs(os.environ.get("USER"))
         self.table.clear()
         for job in rows:
-            self.table.add_row(str(job.id), job.name, job.status)
+            self.table.add_row(str(job.id), job.name, job.state or job.status)
 
 
 class ClusterApp(App):
@@ -109,7 +109,7 @@ class ClusterApp(App):
     def refresh_tables(self) -> None:  # pragma: no cover - runtime hook
         job_list = list_jobs()
         total = len(job_list) or 1
-        state_counts = Counter(job.status for job in job_list)
+        state_counts = Counter(job.state for job in job_list)
         part_counts = Counter(job.partition for job in job_list)
         user_counts = Counter(job.user for job in job_list)
 

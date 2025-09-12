@@ -141,6 +141,7 @@ class Job:
     partition: str
     stdout_path: Optional[Path]
     stderr_path: Optional[Path]
+    state: Optional[str] = None
 
     @property
     def output_file(self) -> Optional[Path]:
@@ -216,19 +217,20 @@ def list_jobs(user: Optional[str] = None) -> list[Job]:
     """
     if not _which("squeue"):
         raise SlurmUnavailableError("squeue command not found on PATH")
-    cmd = ["squeue", "-h", "-o", "%i|%j|%u|%P"]
+    cmd = ["squeue", "-h", "-o", "%i|%j|%u|%P|%T"]
     if user:
         cmd.extend(["-u", user])
     out = _run(cmd, check=False).stdout
     rows: list[Job] = []
     for line in out.splitlines():
         parts = line.split("|")
-        if len(parts) == 4:
-            jid, name, usr, part = parts
+        if len(parts) == 5:
+            jid, name, usr, part, state = parts
             try:
                 jid_int = int(jid)
             except ValueError:
                 continue
+            token = state.split()[0].split("+")[0].split("(")[0].rstrip("*")
             rows.append(
                 Job(
                     id=jid_int,
@@ -237,6 +239,7 @@ def list_jobs(user: Optional[str] = None) -> list[Job]:
                     partition=part,
                     stdout_path=None,
                     stderr_path=None,
+                    state=token,
                 )
             )
     return rows
