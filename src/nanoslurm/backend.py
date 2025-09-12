@@ -2,28 +2,29 @@ from __future__ import annotations
 
 import os
 import shlex
-import subprocess
 import time
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Iterable, Optional, Sequence, Union
+from typing import Iterable, Optional, Union
+
+from ._slurm import (
+    SlurmUnavailableError,
+    require as _require,
+    run as _run,
+    sacct as _sacct,
+    squeue as _squeue,
+    sinfo as _sinfo,
+    sprio as _sprio,
+    sshare as _sshare,
+    which as _which,
+)
 
 RUN_SH = Path(__file__).with_name("run.sh")
 
 _TERMINAL = {"COMPLETED", "FAILED", "CANCELLED", "TIMEOUT", "PREEMPTED", "BOOT_FAIL", "NODE_FAIL"}
 _RUNNINGISH = {"PENDING", "CONFIGURING", "RUNNING", "COMPLETING", "STAGE_OUT", "SUSPENDED", "RESV_DEL_HOLD"}
-
-
-class SlurmUnavailableError(RuntimeError):
-    """Raised when required SLURM commands are missing."""
-
-
-def _require(cmd: str) -> None:
-    """Ensure *cmd* exists on PATH, otherwise raise ``SlurmUnavailableError``."""
-    if not _which(cmd):
-        raise SlurmUnavailableError(f"Required command '{cmd}' not found. Is this a SLURM environment?")
 
 
 def submit(
@@ -229,47 +230,56 @@ def list_jobs(user: Optional[str] = None) -> list[Job]:
     if not (_which("squeue") or _which("sacct")):
         raise SlurmUnavailableError("squeue or sacct command not found on PATH")
 
-    use_squeue = _which("squeue")
-    if use_squeue:
-        cmd = ["squeue", "-h", "-o", "%i|%j|%u|%P|%T|%V|%S"]
+    rows_data: list[dict[str, str]]
+    if _which("squeue"):
+        fields = {
+            "id": "%i",
+            "name": "%j",
+            "user": "%u",
+            "partition": "%P",
+            "status": "%T",
+            "submit": "%V",
+            "start": "%S",
+        }
+        args: list[str] = []
         if user:
-            cmd.extend(["-u", user])
+            args.extend(["-u", user])
+        rows_data = _squeue(fields, args=args, runner=_run, which_func=_which)
     else:
-        cmd = [
-            "sacct",
-            "-n",
-            "-o",
-            "JobIDRaw,JobName,User,Partition,State,Submit,Start",
-            "--parsable2",
-            "-X",
-        ]
+        fields = {
+            "id": "JobIDRaw",
+            "name": "JobName",
+            "user": "User",
+            "partition": "Partition",
+            "status": "State",
+            "submit": "Submit",
+            "start": "Start",
+        }
+        args = ["-X"]
         if user:
-            cmd.extend(["-u", user])
+            args.extend(["-u", user])
+        rows_data = _sacct(fields, args=args, runner=_run, which_func=_which)
 
-    out = _run(cmd, check=False).stdout
     rows: list[Job] = []
-    for line in out.splitlines():
-        parts = line.split("|")
-        if len(parts) == 7:
-            jid, name, usr, part, status, submit, start = parts
-            try:
-                jid_int = int(jid)
-            except ValueError:
-                continue
-            token = status.split()[0].split("+")[0].split("(")[0].rstrip("*")
-            rows.append(
-                Job(
-                    id=jid_int,
-                    name=name,
-                    user=usr,
-                    partition=part,
-                    stdout_path=None,
-                    stderr_path=None,
-                    submit_time=_parse_datetime(submit),
-                    start_time=_parse_datetime(start),
-                    last_status=token,
-                )
+    for r in rows_data:
+        try:
+            jid_int = int(r["id"])
+        except (KeyError, ValueError):
+            continue
+        token = r["status"].split()[0].split("+")[0].split("(")[0].rstrip("*")
+        rows.append(
+            Job(
+                id=jid_int,
+                name=r.get("name", ""),
+                user=r.get("user", ""),
+                partition=r.get("partition", ""),
+                stdout_path=None,
+                stderr_path=None,
+                submit_time=_parse_datetime(r.get("submit", "")),
+                start_time=_parse_datetime(r.get("start", "")),
+                last_status=token,
             )
+        )
     return rows
 
 
@@ -280,18 +290,13 @@ def node_state_counts() -> dict[str, int]:
     nodes reported in each state. Requires that the ``sinfo`` command is
     available on ``PATH``.
     """
-    if not _which("sinfo"):
-        raise SlurmUnavailableError("sinfo command not found on PATH")
-    out = _run(["sinfo", "-h", "-o", "%T|%D"], check=False).stdout
+    rows = _sinfo({"state": "%T", "count": "%D"}, runner=_run, which_func=_which)
     counts: Counter[str] = Counter()
-    for line in out.splitlines():
-        parts = line.split("|")
-        if len(parts) != 2:
-            continue
-        state, count = parts
+    for r in rows:
+        state = r.get("state", "")
         token = state.split()[0].split("+")[0].split("(")[0].rstrip("*")
         try:
-            counts[token] += int(count)
+            counts[token] += int(r.get("count", "0"))
         except ValueError:
             continue
     return dict(counts)
@@ -307,25 +312,20 @@ def recent_completions(span: str = "day", count: int = 7) -> list[tuple[str, int
     Returns:
         List of (period, job_count) tuples sorted chronologically.
     """
-    _require("sacct")
     if span not in {"day", "week"}:
         raise ValueError("span must be 'day' or 'week'")
 
     delta = timedelta(days=count if span == "day" else count * 7)
     start = (datetime.now() - delta).strftime("%Y-%m-%d")
-    cmd = [
-        "sacct",
-        "--state=CD",
-        "--noheader",
-        "--parsable2",
-        "--format=End",
-        f"--starttime={start}",
-        "-X",
-    ]
-    out = _run(cmd, check=False).stdout
+    rows = _sacct(
+        {"end": "End"},
+        args=["--state=CD", f"--starttime={start}", "-X"],
+        runner=_run,
+        which_func=_which,
+    )
     counts: Counter[str] = Counter()
-    for line in out.splitlines():
-        token = line.strip()
+    for r in rows:
+        token = r.get("end", "").strip()
         if not token:
             continue
         try:
@@ -357,20 +357,26 @@ def _parse_gpu(gres: str) -> int:
 
 def _partition_caps() -> dict[str, dict[str, int]]:
     """Return total CPUs/GPUs available in each partition."""
-    _require("sinfo")
-    out = _run(["sinfo", "-ah", "-o", "%P|%C|%G|%D"], check=False).stdout
+    rows = _sinfo(
+        {"part": "%P", "cpus": "%C", "gres": "%G", "nodes": "%D"},
+        args=["-a"],
+        runner=_run,
+        which_func=_which,
+        check=False,
+    )
     caps: dict[str, dict[str, int]] = {}
-    for line in out.splitlines():
-        part, c_field, g_field, d_field = (line + "|||").split("|")[:4]
-        part = part.rstrip("*")
+    for r in rows:
+        part = r.get("part", "").rstrip("*")
         cpus = 0
+        c_field = r.get("cpus", "")
         if c_field:
             try:
                 cpus = int(c_field.split("/")[-1])
             except ValueError:
                 pass
-        gpus_per_node = _parse_gpu(g_field)
+        gpus_per_node = _parse_gpu(r.get("gres", ""))
         nodes = 0
+        d_field = r.get("nodes", "")
         if d_field:
             try:
                 nodes = int(d_field)
@@ -383,18 +389,23 @@ def _partition_caps() -> dict[str, dict[str, int]]:
 def partition_utilization() -> dict[str, float]:
     """Return per-partition utilization percentage based on running jobs."""
     caps = _partition_caps()
-    _require("squeue")
-    out = _run(["squeue", "-h", "-t", "RUNNING", "-o", "%P|%C|%b"], check=False).stdout
+    rows = _squeue(
+        {"part": "%P", "cpus": "%C", "gres": "%b"},
+        args=["-t", "RUNNING"],
+        runner=_run,
+        which_func=_which,
+    )
     usage: dict[str, dict[str, int]] = {}
-    for line in out.splitlines():
-        part, c_field, g_field = (line + "||").split("|")[:3]
+    for r in rows:
+        part = r.get("part", "")
+        c_field = r.get("cpus", "")
         cpus = 0
         if c_field:
             try:
                 cpus = int(c_field)
             except ValueError:
                 pass
-        gpus = _parse_gpu(g_field)
+        gpus = _parse_gpu(r.get("gres", ""))
         u = usage.setdefault(part, {"cpus": 0, "gpus": 0})
         u["cpus"] += cpus
         u["gpus"] += gpus
@@ -416,24 +427,23 @@ def fairshare_scores() -> dict[str, float]:
     :command:`sshare`. If neither command is available an empty mapping is
     returned.
     """
-    cmd: Optional[Sequence[str]] = None
-    if _which("sprio"):
-        cmd = ["sprio", "-o", "user,fairshare", "-n"]
-    elif _which("sshare"):
-        cmd = ["sshare", "-o", "user,fairshare", "-n"]
-    if not cmd:
-        return {}
+    rows: list[dict[str, str]]
+    try:
+        rows = _sprio({"user": "user", "fairshare": "fairshare"}, runner=_run, which_func=_which)
+    except SlurmUnavailableError:
+        try:
+            rows = _sshare({"user": "user", "fairshare": "fairshare"}, runner=_run, which_func=_which)
+        except SlurmUnavailableError:
+            return {}
 
-    out = _run(cmd, check=False).stdout
     scores: dict[str, float] = {}
-    for line in out.splitlines():
-        parts = line.split()
-        if len(parts) >= 2:
-            user, val = parts[0], parts[1]
-            try:
-                scores[user] = float(val)
-            except ValueError:
-                continue
+    for r in rows:
+        user = r.get("user", "")
+        val = r.get("fairshare", "")
+        try:
+            scores[user] = float(val)
+        except ValueError:
+            continue
     return scores
 
 
@@ -464,26 +474,23 @@ def job_history() -> dict[str, dict[str, int]]:
 
     now = datetime.now()
     start = now - timedelta(hours=24)
-    cmd = [
-        "sacct",
-        "-a",
-        "-X",
-        "-n",
-        "--parsable2",
-        "-S",
-        start.strftime("%Y-%m-%dT%H:%M:%S"),
-        "-E",
-        now.strftime("%Y-%m-%dT%H:%M:%S"),
-        "-o",
-        "User,State",
-    ]
-    out = _run(cmd, check=False).stdout
+    rows = _sacct(
+        {"user": "User", "state": "State"},
+        args=[
+            "-a",
+            "-X",
+            "-S",
+            start.strftime("%Y-%m-%dT%H:%M:%S"),
+            "-E",
+            now.strftime("%Y-%m-%dT%H:%M:%S"),
+        ],
+        runner=_run,
+        which_func=_which,
+    )
     stats: dict[str, dict[str, int]] = {}
-    for line in out.splitlines():
-        parts = line.split("|")
-        if len(parts) < 2:
-            continue
-        user, state = parts[0], parts[1]
+    for r in rows:
+        user = r.get("user", "")
+        state = r.get("state", "")
         if not user:
             continue
         token = state.split()[0].split("+")[0].split("(")[0].rstrip("*")
@@ -496,36 +503,27 @@ def job_history() -> dict[str, dict[str, int]]:
 
 
 def _squeue_status(job_id: int) -> Optional[str]:
-    if not _which("squeue"):
+    try:
+        rows = _squeue({"state": "%T"}, args=["-j", str(job_id)], runner=_run, which_func=_which)
+    except SlurmUnavailableError:
         return None
-    out = _run(["squeue", "-j", str(job_id), "-h", "-o", "%T"], check=False).stdout.strip()
-    if out:
-        token = out.split()[0].split("+")[0].split("(")[0].rstrip("*")
+    if rows:
+        state = rows[0].get("state", "")
+        token = state.split()[0].split("+")[0].split("(")[0].rstrip("*")
         return token
     return None
 
 
 def _sacct_status(job_id: int) -> Optional[str]:
-    if not _which("sacct"):
+    try:
+        rows = _sacct({"state": "State"}, args=["-j", str(job_id), "-X"], runner=_run, which_func=_which)
+    except SlurmUnavailableError:
         return None
-    out = _run(["sacct", "-j", str(job_id), "-o", "State", "-n", "--parsable2", "-X"], check=False).stdout
-    for line in out.splitlines():
-        token = line.strip()
+    for r in rows:
+        token = r.get("state", "").strip()
         if token:
             return token.split()[0].split("+")[0].split("(")[0]
     return None
-
-
-def _run(cmd: Sequence[str], check: bool = True) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=check)
-
-
-def _which(name: str) -> bool:
-    for path in os.environ.get("PATH", "").split(os.pathsep):
-        candidate = Path(path) / name
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return True
-    return False
 
 
 def _timestamp_ms() -> str:
