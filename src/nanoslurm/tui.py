@@ -7,8 +7,9 @@ from textual.app import App, ComposeResult
 from textual.containers import Center
 from textual.widgets import DataTable, Footer, Header, TabbedContent, TabPane
 
-from .backend import list_jobs, node_state_counts, recent_completions
+from .backend import fairshare_scores, list_jobs
 
+from .backend import list_jobs, node_state_counts, recent_completions
 from .backend import list_jobs, partition_utilization, recent_completions
 
 BASE_CSS = ""
@@ -87,6 +88,9 @@ class ClusterApp(App):
         yield Footer()
 
     def on_mount(self) -> None:  # pragma: no cover - runtime hook
+        self.state_table.add_columns("State", "Count", "Percent")
+        self.partition_table.add_columns("Partition", "Jobs", "Percent")
+        self.user_table.add_columns("User", "Jobs", "Percent", "FairShare")
         self.node_table.add_columns("State", "Nodes", "Percent")
         self.state_table.add_columns("State", "Jobs", "Share%")
         self.partition_table.add_columns("Partition", "Jobs", "Running", "Pending", "Share%")
@@ -111,6 +115,21 @@ class ClusterApp(App):
         total = len(job_list) or 1
 
         state_counts = Counter(job.last_status for job in job_list)
+        part_counts = Counter(job.partition for job in job_list)
+        user_counts = Counter(job.user for job in job_list)
+        shares = fairshare_scores()
+
+        state_rows = sorted(
+            (state, cnt, round(cnt / total * 100, 1)) for state, cnt in state_counts.items()
+        )
+        part_rows = sorted(
+            (part, cnt, round(cnt / total * 100, 1)) for part, cnt in part_counts.items()
+        )
+        user_rows = []
+        for user, cnt in sorted(user_counts.items(), key=lambda x: (-x[1], x[0]))[:5]:
+            fs = shares.get(user)
+            user_rows.append((user, cnt, round(cnt / total * 100, 1), fs))
+
 
         part_stats: dict[str, Counter] = {}
         user_stats: dict[str, Counter] = {}
@@ -130,6 +149,7 @@ class ClusterApp(App):
             util_map = partition_utilization()
         except Exception:  # pragma: no cover - runtime environment
             util_map = {}
+
 
         self.state_table.clear()
         for state, cnt in sorted(state_counts.items()):
@@ -181,6 +201,9 @@ class ClusterApp(App):
                 table.add_row(user, str(jobs), str(running), str(pending), f"{share:.1f}%")
 
         self.user_table.clear()
+        for user, count, pct, fs in user_rows:
+            fs_str = f"{fs:.3f}" if isinstance(fs, float) else "N/A"
+            self.user_table.add_row(user, str(count), f"{pct:.1f}%", fs_str)
         for user, cnts in sorted(user_stats.items(), key=lambda x: (-x[1]["jobs"], x[0])):
             jobs = cnts["jobs"]
             running = cnts.get("RUNNING", 0)
