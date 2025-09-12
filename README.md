@@ -82,6 +82,14 @@ Most job parameters (such as cluster, time, or resource counts) have no built-in
 defaults. Set them explicitly on the command line or persist them via
 `nslurm defaults set`.
 
+View current jobs in an interactive TUI:
+
+```bash
+nslurm jobs
+```
+
+Use the arrow keys or `h`, `j`, `k`, `l` to move around and `q` to quit.
+
 ## Releasing
 
 Bump the version in `pyproject.toml` and merge the change into `main`. A

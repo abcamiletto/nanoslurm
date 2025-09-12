@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 
 from textual.app import App, ComposeResult
-from textual.widgets import DataTable
+from textual.widgets import DataTable, Footer, Header
 
 from .nanoslurm import SlurmUnavailableError, _run, _which
 
@@ -11,16 +11,39 @@ from .nanoslurm import SlurmUnavailableError, _run, _which
 class JobApp(App):
     """Textual app to display current user's SLURM jobs."""
 
-    BINDINGS = [("q", "quit", "Quit")]
+    BINDINGS = [
+        ("q", "quit", "Quit"),
+        ("h", "cursor_left", "Left"),
+        ("j", "cursor_down", "Down"),
+        ("k", "cursor_up", "Up"),
+        ("l", "cursor_right", "Right"),
+    ]
 
     def compose(self) -> ComposeResult:  # pragma: no cover - Textual composition
+        yield Header()
         self.table: DataTable = DataTable()
         yield self.table
+        yield Footer()
 
     def on_mount(self) -> None:  # pragma: no cover - runtime hook
         self.table.add_columns("ID", "Name", "State")
+        self.table.show_cursor = True
+        self.table.cursor_type = "row"
         self.refresh_table()
         self.set_interval(2.0, self.refresh_table)
+        self.set_focus(self.table)
+
+    def action_cursor_left(self) -> None:  # pragma: no cover - Textual action
+        self.table.action_cursor_left()
+
+    def action_cursor_right(self) -> None:  # pragma: no cover - Textual action
+        self.table.action_cursor_right()
+
+    def action_cursor_up(self) -> None:  # pragma: no cover - Textual action
+        self.table.action_cursor_up()
+
+    def action_cursor_down(self) -> None:  # pragma: no cover - Textual action
+        self.table.action_cursor_down()
 
     def refresh_table(self) -> None:  # pragma: no cover - runtime hook
         rows = _list_jobs()
