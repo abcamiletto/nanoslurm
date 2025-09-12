@@ -6,7 +6,7 @@ import subprocess
 import time
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterable, Optional, Sequence, Union
 
@@ -245,8 +245,7 @@ def list_jobs(user: Optional[str] = None) -> list[Job]:
                 )
             )
     return rows
-
-
+ 
 def node_state_counts() -> dict[str, int]:
     """Return a mapping of node state to count.
 
@@ -269,6 +268,51 @@ def node_state_counts() -> dict[str, int]:
         except ValueError:
             continue
     return dict(counts)
+
+
+def recent_completions(span: str = "day", count: int = 7) -> list[tuple[str, int]]:
+    """Return counts of recently completed jobs grouped by *span*.
+
+    Args:
+        span: Group results by ``"day"`` or ``"week"``.
+        count: Number of periods to return.
+
+    Returns:
+        List of (period, job_count) tuples sorted chronologically.
+    """
+    _require("sacct")
+    if span not in {"day", "week"}:
+        raise ValueError("span must be 'day' or 'week'")
+
+    delta = timedelta(days=count if span == "day" else count * 7)
+    start = (datetime.now() - delta).strftime("%Y-%m-%d")
+    cmd = [
+        "sacct",
+        "--state=CD",
+        "--noheader",
+        "--parsable2",
+        "--format=End",
+        f"--starttime={start}",
+        "-X",
+    ]
+    out = _run(cmd, check=False).stdout
+    counts: Counter[str] = Counter()
+    for line in out.splitlines():
+        token = line.strip()
+        if not token:
+            continue
+        try:
+            dt = datetime.strptime(token.split(".")[0], "%Y-%m-%dT%H:%M:%S")
+        except ValueError:
+            continue
+        if span == "week":
+            year, week, _ = dt.isocalendar()
+            key = f"{year}-W{week:02d}"
+        else:
+            key = dt.strftime("%Y-%m-%d")
+        counts[key] += 1
+    items = sorted(counts.items())
+    return items[-count:]
 
 
 def _squeue_status(job_id: int) -> Optional[str]:
@@ -314,4 +358,5 @@ __all__ = [
     "submit",
     "list_jobs",
     "node_state_counts",
+    "recent_completions",
 ]
