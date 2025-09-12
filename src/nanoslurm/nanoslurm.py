@@ -220,13 +220,12 @@ def _run(cmd: Sequence[str], check: bool = True) -> subprocess.CompletedProcess:
 
 
 def _which(name: str) -> bool:
-    return any(
-        (Path(p) / name).exists() and (Path(p) / name).is_file() and os.access(Path(p) / name, os.X_OK)
-        for p in os.environ.get("PATH", "").split(os.pathsep)
-    )
+    for path in os.environ.get("PATH", "").split(os.pathsep):
+        candidate = Path(path) / name
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return True
+    return False
 
 
 def _timestamp_ms() -> str:
-    now = datetime.now()
-    ms = int((time.time() - int(time.time())) * 1000)
-    return now.strftime("%Y-%m-%d_%H-%M-%S.") + f"{ms:03d}"
+    return datetime.now().strftime("%Y-%m-%d_%H-%M-%S.%f")[:-3]

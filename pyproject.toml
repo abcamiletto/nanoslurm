@@ -1,7 +1,7 @@
 [project]
 name = "nanoslurm"
 version = "0.1.2"
-description = "Add your description here"
+description = "Zero-dependency Python wrapper for SLURM job submission and monitoring"
 readme = "README.md"
 authors = [
     { name = "Andrea Boscolo Camiletto", email = "abcamiletto@gmail.com" },
