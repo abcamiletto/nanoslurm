@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import os
-import subprocess
+from subprocess import CompletedProcess
 from pathlib import Path
 from typing import Mapping, Sequence, List, Dict, Optional
+
+from .utils import run_command
 
 
 class SlurmUnavailableError(RuntimeError):
@@ -25,14 +27,15 @@ def require(cmd: str, which_func=which) -> None:
         )
 
 
-def run(cmd: Sequence[str], check: bool = True) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        check=check,
-    )
+def run(cmd: Sequence[str], check: bool = True) -> CompletedProcess:
+    """Execute *cmd* using :func:`utils.cmd.run_command`.
+
+    This wrapper ensures consistent logging and retry behaviour across the
+    project while maintaining the original return type from
+    :func:`subprocess.run`.
+    """
+
+    return run_command(cmd, check=check)
 
 
 def normalize_state(state: str) -> str:
