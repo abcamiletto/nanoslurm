@@ -7,7 +7,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Center
 from textual.widgets import DataTable, Footer, Header, TabbedContent, TabPane
 
-from .backend import list_jobs
+from .backend import list_jobs, recent_completions
 
 BASE_CSS = ""
 
@@ -147,4 +147,42 @@ class ClusterApp(App):
             self.user_table.add_row(user, str(jobs), str(running), str(pending), f"{share:.1f}%")
 
 
-__all__ = ["JobApp", "ClusterApp"]
+class SummaryApp(App):
+    """Textual app to display recent job completions."""
+
+    CSS = BASE_CSS
+    BINDINGS = [("q", "quit", "Quit")]
+
+    def compose(self) -> ComposeResult:  # pragma: no cover - Textual composition
+        yield Header()
+        self.day_table: DataTable = DataTable()
+        yield self.day_table
+        self.week_table: DataTable = DataTable()
+        yield self.week_table
+        yield Footer()
+
+    def on_mount(self) -> None:  # pragma: no cover - runtime hook
+        self.day_table.add_columns("Day", "Jobs", "Spark")
+        self.week_table.add_columns("Week", "Jobs", "Spark")
+        self.refresh_tables()
+        self.set_interval(60.0, self.refresh_tables)
+
+    def refresh_tables(self) -> None:  # pragma: no cover - runtime hook
+        day_rows = recent_completions("day", 7)
+        week_rows = recent_completions("week", 8)
+
+        def _add_rows(table: DataTable, rows: list[tuple[str, int]]) -> None:
+            table.clear()
+            if not rows:
+                return
+            max_count = max(cnt for _, cnt in rows) or 1
+            levels = "▁▂▃▄▅▆▇█"
+            for label, cnt in rows:
+                idx = int(cnt / max_count * (len(levels) - 1))
+                table.add_row(label, str(cnt), levels[idx])
+
+        _add_rows(self.day_table, day_rows)
+        _add_rows(self.week_table, week_rows)
+
+
+__all__ = ["JobApp", "ClusterApp", "SummaryApp"]
