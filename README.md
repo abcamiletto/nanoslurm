@@ -77,3 +77,7 @@ nslurm defaults set cluster gpu22
 nslurm defaults reset
 nslurm defaults edit            # open the YAML config in $EDITOR
 ```
+
+Most job parameters (such as cluster, time, or resource counts) have no built-in
+defaults. Set them explicitly on the command line or persist them via
+`nslurm defaults set`.

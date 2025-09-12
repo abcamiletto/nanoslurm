@@ -15,14 +15,23 @@ from .nanoslurm import submit
 app = typer.Typer(help="Submit and manage jobs with nanoslurm")
 console = Console()
 
-# Default values mirror the Python API defaults
+# Allowed keys and their types for default configuration
+KEY_TYPES: dict[str, type] = {
+    "name": str,
+    "cluster": str,
+    "time": str,
+    "cpus": int,
+    "memory": int,
+    "gpus": int,
+    "stdout_file": str,
+    "stderr_file": str,
+    "signal": str,
+    "workdir": str,
+}
+
+# Minimal built-in defaults; most values must be supplied via CLI or config
 DEFAULTS: dict[str, object] = {
-    "name": "default_job",
-    "cluster": "",
-    "time": "11:59:00",
-    "cpus": 16,
-    "memory": 64,
-    "gpus": 1,
+    "name": "job",
     "stdout_file": "./slurm_logs/%j.txt",
     "stderr_file": "./slurm_logs/%j.err",
     "signal": "SIGUSR1@90",
@@ -67,16 +76,16 @@ def run(
     """Submit a job using nanoslurm."""
     defaults = _load_defaults()
     values: dict[str, object] = {
-        "name": name or defaults["name"],
-        "cluster": cluster or defaults["cluster"],
-        "time": time or defaults["time"],
-        "cpus": cpus or defaults["cpus"],
-        "memory": memory or defaults["memory"],
-        "gpus": gpus or defaults["gpus"],
-        "stdout_file": stdout_file or defaults["stdout_file"],
-        "stderr_file": stderr_file or defaults["stderr_file"],
-        "signal": signal or defaults["signal"],
-        "workdir": workdir or defaults["workdir"],
+        "name": name or defaults.get("name"),
+        "cluster": cluster or defaults.get("cluster"),
+        "time": time or defaults.get("time"),
+        "cpus": cpus or defaults.get("cpus"),
+        "memory": memory or defaults.get("memory"),
+        "gpus": gpus or defaults.get("gpus"),
+        "stdout_file": stdout_file or defaults.get("stdout_file"),
+        "stderr_file": stderr_file or defaults.get("stderr_file"),
+        "signal": signal or defaults.get("signal"),
+        "workdir": workdir or defaults.get("workdir"),
     }
 
     if interactive:
@@ -84,13 +93,18 @@ def run(
             cmd_str = typer.prompt("command")
             command = shlex.split(cmd_str)
         for key, val in list(values.items()):
-            prompt = key.replace("_", " ")
-            if isinstance(val, int):
-                values[key] = typer.prompt(prompt, default=val, type=int)
-            else:
-                values[key] = typer.prompt(prompt, default=str(val))
-    elif not command:
-        raise typer.BadParameter("COMMAND required unless --interactive is used")
+            if val is None:
+                prompt = key.replace("_", " ")
+                if KEY_TYPES[key] is int:
+                    values[key] = typer.prompt(prompt, type=int)
+                else:
+                    values[key] = typer.prompt(prompt)
+    else:
+        if not command:
+            raise typer.BadParameter("COMMAND required unless --interactive is used")
+        missing = [k for k, v in values.items() if v is None]
+        if missing:
+            raise typer.BadParameter(f"Missing options: {', '.join(missing)}")
 
     job = submit(command, **values)  # type: ignore[arg-type]
     console.print(f"[green]Submitted job {job.id} ({job.name})[/green]")
@@ -117,20 +131,20 @@ def defaults_show() -> None:
 @defaults_app.command("set")
 def defaults_set(key: str, value: str) -> None:
     """Set a default value."""
-    if key not in DEFAULTS:
+    if key not in KEY_TYPES:
         raise typer.BadParameter(f"Unknown key: {key}")
     cfg = _load_defaults()
-    if isinstance(DEFAULTS[key], int):
-        cfg[key] = int(value)
-    else:
-        cfg[key] = value
+    typ = KEY_TYPES[key]
+    cfg[key] = typ(value) if typ is int else value
     _save_defaults(cfg)
     console.print(f"[green]{key} set to {cfg[key]}[/green]")
 
 
 @defaults_app.command("reset")
 def defaults_reset() -> None:
-    """Reset defaults to built-in values."""
+    """Clear all saved defaults."""
+    if CONFIG_PATH.exists():
+        CONFIG_PATH.unlink()
     _save_defaults(DEFAULTS.copy())
     console.print("[green]Defaults reset[/green]")
 
