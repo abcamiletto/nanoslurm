@@ -150,10 +150,7 @@ def _cluster_partition_counts() -> list[tuple[str, int, float]]:
             counts[line] = counts.get(line, 0) + 1
     total = sum(counts.values()) or 1
     return sorted(
-        [
-            (part, count, round(count / total * 100, 1))
-            for part, count in counts.items()
-        ],
+        [(part, count, round(count / total * 100, 1)) for part, count in counts.items()],
         key=lambda x: x[0],
     )
 

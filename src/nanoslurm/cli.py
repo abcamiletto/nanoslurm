@@ -107,6 +107,7 @@ def defaults_show() -> None:
         table.add_row(k, str(v))
     console.print(table)
 
+
 @defaults_app.command("set")
 def defaults_set(
     key: str = typer.Argument(..., help=f"Configuration key to set. Options: {KEY_HELP}"),
@@ -163,4 +164,3 @@ def defaults_edit() -> None:
 
 if __name__ == "__main__":
     app()
-
