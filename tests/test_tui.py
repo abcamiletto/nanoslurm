@@ -6,6 +6,7 @@ from nanoslurm.nanoslurm import SlurmUnavailableError
 from nanoslurm.tui import (
     _cluster_job_state_counts,
     _cluster_top_users,
+    _cluster_partition_counts,
     _list_jobs,
 )
 
@@ -32,6 +33,8 @@ def test_cluster_stats_no_squeue(monkeypatch):
         _cluster_job_state_counts()
     with pytest.raises(SlurmUnavailableError):
         _cluster_top_users()
+    with pytest.raises(SlurmUnavailableError):
+        _cluster_partition_counts()
 
 
 def test_cluster_job_state_counts_parse(monkeypatch):
@@ -60,19 +63,15 @@ def test_cluster_top_users_parse(monkeypatch):
     ]
 
 
-def test_cluster_commands_with_clusters(monkeypatch):
+def test_cluster_partition_counts_parse(monkeypatch):
     monkeypatch.setattr("nanoslurm.tui._which", lambda cmd: True)
-    captured: list[list[str]] = []
 
     def fake_run(cmd, check=False):
-        captured.append(cmd)
-        return types.SimpleNamespace(stdout="")
+        return types.SimpleNamespace(stdout="alpha\nbeta\nalpha\n")
 
     monkeypatch.setattr("nanoslurm.tui._run", fake_run)
-    _cluster_job_state_counts(clusters="alpha,beta")
-    _cluster_top_users(clusters="alpha,beta")
-    assert [
-        ["squeue", "-h", "-o", "%T", "-M", "alpha,beta"],
-        ["squeue", "-h", "-o", "%u", "-M", "alpha,beta"],
-    ] == captured
+    assert _cluster_partition_counts() == [
+        ("alpha", 2, 66.7),
+        ("beta", 1, 33.3),
+    ]
 

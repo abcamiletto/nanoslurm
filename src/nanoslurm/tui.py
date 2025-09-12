@@ -57,30 +57,33 @@ class ClusterApp(App):
 
     BINDINGS = [("q", "quit", "Quit")]
 
-    def __init__(self, clusters: str | None = None) -> None:
-        super().__init__()
-        self.clusters = clusters
-
     def compose(self) -> ComposeResult:  # pragma: no cover - Textual composition
         yield Header()
         self.state_table: DataTable = DataTable()
         yield self.state_table
+        self.partition_table: DataTable = DataTable()
+        yield self.partition_table
         self.user_table: DataTable = DataTable()
         yield self.user_table
         yield Footer()
 
     def on_mount(self) -> None:  # pragma: no cover - runtime hook
         self.state_table.add_columns("State", "Count", "Percent")
+        self.partition_table.add_columns("Partition", "Jobs", "Percent")
         self.user_table.add_columns("User", "Jobs", "Percent")
         self.refresh_tables()
         self.set_interval(2.0, self.refresh_tables)
 
     def refresh_tables(self) -> None:  # pragma: no cover - runtime hook
-        states = _cluster_job_state_counts(clusters=self.clusters)
-        users = _cluster_top_users(clusters=self.clusters)
+        states = _cluster_job_state_counts()
+        partitions = _cluster_partition_counts()
+        users = _cluster_top_users()
         self.state_table.clear()
         for state, count, pct in states:
             self.state_table.add_row(state, str(count), f"{pct:.1f}%")
+        self.partition_table.clear()
+        for part, count, pct in partitions:
+            self.partition_table.add_row(part, str(count), f"{pct:.1f}%")
         self.user_table.clear()
         for user, count, pct in users:
             self.user_table.add_row(user, str(count), f"{pct:.1f}%")
@@ -100,14 +103,11 @@ def _list_jobs() -> list[tuple[str, str, str]]:
     return rows
 
 
-def _cluster_job_state_counts(clusters: str | None = None) -> list[tuple[str, int, float]]:
+def _cluster_job_state_counts() -> list[tuple[str, int, float]]:
     """Return a list of (state, count, percent) for all jobs on the cluster."""
     if not _which("squeue"):
         raise SlurmUnavailableError("squeue command not found on PATH")
-    cmd = ["squeue", "-h", "-o", "%T"]
-    if clusters:
-        cmd.extend(["-M", clusters])
-    out = _run(cmd, check=False).stdout
+    out = _run(["squeue", "-h", "-o", "%T"], check=False).stdout
     counts: dict[str, int] = {}
     for line in out.splitlines():
         line = line.strip()
@@ -120,16 +120,11 @@ def _cluster_job_state_counts(clusters: str | None = None) -> list[tuple[str, in
     )
 
 
-def _cluster_top_users(
-    limit: int = 5, clusters: str | None = None
-) -> list[tuple[str, int, float]]:
+def _cluster_top_users(limit: int = 5) -> list[tuple[str, int, float]]:
     """Return the top users by job count."""
     if not _which("squeue"):
         raise SlurmUnavailableError("squeue command not found on PATH")
-    cmd = ["squeue", "-h", "-o", "%u"]
-    if clusters:
-        cmd.extend(["-M", clusters])
-    out = _run(cmd, check=False).stdout
+    out = _run(["squeue", "-h", "-o", "%u"], check=False).stdout
     counts: dict[str, int] = {}
     for line in out.splitlines():
         line = line.strip()
@@ -141,6 +136,26 @@ def _cluster_top_users(
     for user, count in items[:limit]:
         result.append((user, count, round(count / total * 100, 1)))
     return result
+
+
+def _cluster_partition_counts() -> list[tuple[str, int, float]]:
+    """Return a list of (partition, count, percent) for all jobs."""
+    if not _which("squeue"):
+        raise SlurmUnavailableError("squeue command not found on PATH")
+    out = _run(["squeue", "-h", "-o", "%P"], check=False).stdout
+    counts: dict[str, int] = {}
+    for line in out.splitlines():
+        line = line.strip()
+        if line:
+            counts[line] = counts.get(line, 0) + 1
+    total = sum(counts.values()) or 1
+    return sorted(
+        [
+            (part, count, round(count / total * 100, 1))
+            for part, count in counts.items()
+        ],
+        key=lambda x: x[0],
+    )
 
 
 __all__ = ["JobApp", "ClusterApp"]

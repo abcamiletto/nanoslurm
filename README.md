@@ -90,12 +90,11 @@ nslurm jobs
 
 Use the arrow keys or `h`, `j`, `k`, `l` to move around and `q` to quit.
 
-View cluster-wide statistics such as job states and top users with counts and
-percentages. To query additional clusters, pass a comma-separated list via
-`--clusters`:
+View cluster-wide statistics such as job states, top users, and job counts by
+partition with counts and percentages:
 
 ```bash
-nslurm stats --clusters alpha,beta
+nslurm stats
 ```
 
 ## Releasing
