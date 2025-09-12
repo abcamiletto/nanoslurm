@@ -14,16 +14,25 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: astral-sh/setup-uv@v3
+        with:
+          python-version: "3.11"
       - name: Determine version change
         id: version
         run: |
-          new_version=$(grep '^version = ' pyproject.toml | sed -E 's/version = "([^"]+)"/\1/')
-          echo "version=$new_version" >> $GITHUB_OUTPUT
-          old_version=$(git show HEAD^:pyproject.toml 2>/dev/null | grep '^version = ' | sed -E 's/version = "([^"]+)"/\1/' || echo "")
-          if [ "$new_version" != "$old_version" ]; then
-            echo "changed=true" >> $GITHUB_OUTPUT
+          new_version=$(uv version --short)
+          echo "version=$new_version" >> "$GITHUB_OUTPUT"
+          tmp_dir=$(mktemp -d)
+          git show HEAD^:pyproject.toml 2>/dev/null > "$tmp_dir/pyproject.toml" || true
+          if [ -s "$tmp_dir/pyproject.toml" ]; then
+            old_version=$(uv version --short --project "$tmp_dir")
           else
-            echo "changed=false" >> $GITHUB_OUTPUT
+            old_version=""
+          fi
+          if [ "$new_version" != "$old_version" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Create tag
         if: steps.version.outputs.changed == 'true'
