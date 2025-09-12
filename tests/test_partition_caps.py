@@ -3,7 +3,7 @@ import sys
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
-from nanoslurm import backend
+from nanoslurm import stats
 
 
 class Dummy:
@@ -17,9 +17,9 @@ def test_partition_caps_gpu_total(monkeypatch):
     def fake_run(cmd, check=False):
         return Dummy(stdout=sinfo_out)
 
-    monkeypatch.setattr(backend, "_run", fake_run)
-    monkeypatch.setattr(backend, "_require", lambda cmd: None)
+    monkeypatch.setattr(stats, "_run", fake_run)
+    monkeypatch.setattr(stats, "_require", lambda cmd: None)
 
-    caps = backend._partition_caps()
+    caps = stats._partition_caps()
     assert caps["p1"]["gpus"] == 16
     assert caps["p1"]["cpus"] == 64

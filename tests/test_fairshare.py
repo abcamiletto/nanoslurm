@@ -4,14 +4,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-import nanoslurm.backend as backend
-from nanoslurm.backend import fairshare_scores
+import nanoslurm.stats as stats
+from nanoslurm.stats import fairshare_scores
 
 
 def test_fairshare_scores_sprio(monkeypatch):
-    monkeypatch.setattr(backend, "_which", lambda cmd: cmd == "sprio")
+    monkeypatch.setattr(stats, "_which", lambda cmd: cmd == "sprio")
     monkeypatch.setattr(
-        backend,
+        stats,
         "_run",
         lambda cmd, check=False: types.SimpleNamespace(stdout="alice 0.5\nbob 0.1\n"),
     )
@@ -19,9 +19,9 @@ def test_fairshare_scores_sprio(monkeypatch):
 
 
 def test_fairshare_scores_sshare(monkeypatch):
-    monkeypatch.setattr(backend, "_which", lambda cmd: cmd == "sshare")
+    monkeypatch.setattr(stats, "_which", lambda cmd: cmd == "sshare")
     monkeypatch.setattr(
-        backend,
+        stats,
         "_run",
         lambda cmd, check=False: types.SimpleNamespace(stdout="carol 0.7\n"),
     )
@@ -29,5 +29,5 @@ def test_fairshare_scores_sshare(monkeypatch):
 
 
 def test_fairshare_scores_missing(monkeypatch):
-    monkeypatch.setattr(backend, "_which", lambda cmd: False)
+    monkeypatch.setattr(stats, "_which", lambda cmd: False)
     assert fairshare_scores() == {}

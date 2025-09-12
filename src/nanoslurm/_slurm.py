@@ -35,6 +35,19 @@ def run(cmd: Sequence[str], check: bool = True) -> subprocess.CompletedProcess:
     )
 
 
+def normalize_state(state: str) -> str:
+    """Normalize a SLURM state string.
+
+    Removes common qualifiers such as ``+``, ``*`` and parenthetical
+    annotations and strips trailing tokens after the first whitespace.
+    """
+    token = state.strip().split()[0] if state else ""
+    token = token.split("+", 1)[0]
+    token = token.split("(", 1)[0]
+    token = token.rstrip("*")
+    return token
+
+
 def _table(
     cmd: Sequence[str],
     keys: Sequence[str],
@@ -133,6 +146,7 @@ def sshare(
 __all__ = [
     "SlurmUnavailableError",
     "run",
+    "normalize_state",
     "which",
     "require",
     "squeue",

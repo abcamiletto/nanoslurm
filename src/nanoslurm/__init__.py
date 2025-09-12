@@ -5,7 +5,7 @@ import sys
 if not sys.platform.startswith("linux"):
     raise OSError("nanoslurm is only supported on Linux")
 
-from .backend import Job, list_jobs, submit
+from .job import Job, list_jobs, submit
 from .defaults import DEFAULTS, KEY_TYPES, load_defaults, save_defaults
 
 __all__ = [
