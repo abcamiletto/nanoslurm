@@ -202,33 +202,20 @@ def list_jobs(user: Optional[str] = None) -> list[Job]:
 
     rows_data: list[dict[str, str]]
     if _which("squeue"):
-        fields = {
-            "id": "%i",
-            "name": "%j",
-            "user": "%u",
-            "partition": "%P",
-            "status": "%T",
-            "submit": "%V",
-            "start": "%S",
-        }
-        args: list[str] = []
-        if user:
-            args.extend(["-u", user])
-        rows_data = _squeue(fields, args=args, runner=_run, which_func=_which)
+        rows_data = _squeue(
+            fields=["id", "name", "user", "partition", "state", "submit", "start"],
+            users=[user] if user else None,
+            runner=_run,
+            which_func=_which,
+        )
     else:
-        fields = {
-            "id": "JobIDRaw",
-            "name": "JobName",
-            "user": "User",
-            "partition": "Partition",
-            "status": "State",
-            "submit": "Submit",
-            "start": "Start",
-        }
-        args = ["-X"]
-        if user:
-            args.extend(["-u", user])
-        rows_data = _sacct(fields, args=args, runner=_run, which_func=_which)
+        rows_data = _sacct(
+            fields=["id", "name", "user", "partition", "state", "submit", "start"],
+            users=[user] if user else None,
+            allocations=True,
+            runner=_run,
+            which_func=_which,
+        )
 
     rows: list[Job] = []
     for r in rows_data:
@@ -236,7 +223,7 @@ def list_jobs(user: Optional[str] = None) -> list[Job]:
             jid_int = int(r["id"])
         except (KeyError, ValueError):
             continue
-        token = normalize_state(r.get("status", ""))
+        token = normalize_state(r.get("state", ""))
         rows.append(
             Job(
                 id=jid_int,
@@ -255,7 +242,7 @@ def list_jobs(user: Optional[str] = None) -> list[Job]:
 
 def _squeue_status(job_id: int) -> Optional[str]:
     try:
-        rows = _squeue({"state": "%T"}, args=["-j", str(job_id)], runner=_run, which_func=_which)
+        rows = _squeue(fields=["state"], jobs=[job_id], runner=_run, which_func=_which)
     except SlurmUnavailableError:
         return None
     if rows:
@@ -266,7 +253,13 @@ def _squeue_status(job_id: int) -> Optional[str]:
 
 def _sacct_status(job_id: int) -> Optional[str]:
     try:
-        rows = _sacct({"state": "State"}, args=["-j", str(job_id), "-X"], runner=_run, which_func=_which)
+        rows = _sacct(
+            fields=["state"],
+            jobs=[job_id],
+            allocations=True,
+            runner=_run,
+            which_func=_which,
+        )
     except SlurmUnavailableError:
         return None
     for r in rows:

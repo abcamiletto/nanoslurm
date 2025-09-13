@@ -21,7 +21,7 @@ from .job import _TERMINAL
 
 def node_state_counts() -> dict[str, int]:
     """Return a mapping of node state to count."""
-    rows = _sinfo({"state": "%T", "count": "%D"}, runner=_run, which_func=_which)
+    rows = _sinfo(fields=["state", "count"], runner=_run, which_func=_which)
     counts: Counter[str] = Counter()
     for r in rows:
         state = r.get("state", "")
@@ -36,8 +36,8 @@ def node_state_counts() -> dict[str, int]:
 def partition_node_state_counts() -> dict[str, dict[str, int]]:
     """Return node state counts grouped by partition."""
     rows = _sinfo(
-        {"part": "%P", "state": "%T", "count": "%D"},
-        args=["-a"],
+        fields=["part", "state", "count"],
+        all_partitions=True,
         runner=_run,
         which_func=_which,
     )
@@ -62,8 +62,10 @@ def recent_completions(span: str = "day", count: int = 7) -> list[tuple[str, int
     delta = timedelta(days=count if span == "day" else count * 7)
     start = (datetime.now() - delta).strftime("%Y-%m-%d")
     rows = _sacct(
-        {"end": "End"},
-        args=["--state=CD", f"--starttime={start}", "-X"],
+        fields=["end"],
+        states=["CD"],
+        start_time=start,
+        allocations=True,
         runner=_run,
         which_func=_which,
     )
@@ -100,8 +102,8 @@ def _parse_gpu(gres: str) -> int:
 
 def _partition_caps() -> dict[str, dict[str, int]]:
     rows = _sinfo(
-        {"part": "%P", "cpus": "%C", "gres": "%G", "nodes": "%D"},
-        args=["-a"],
+        fields=["part", "cpus", "gres", "nodes"],
+        all_partitions=True,
         runner=_run,
         which_func=_which,
         check=False,
@@ -132,8 +134,8 @@ def partition_utilization() -> dict[str, float]:
     """Return per-partition utilization percentage based on running jobs."""
     caps = _partition_caps()
     rows = _squeue(
-        {"part": "%P", "cpus": "%C", "gres": "%b"},
-        args=["-t", "RUNNING"],
+        fields=["part", "cpus", "gres"],
+        states=["RUNNING"],
         runner=_run,
         which_func=_which,
     )
@@ -166,10 +168,10 @@ def fairshare_scores() -> dict[str, float]:
     """Return a mapping of users to their fair-share scores."""
     rows: list[dict[str, str]]
     try:
-        rows = _sprio({"user": "user", "fairshare": "fairshare"}, runner=_run, which_func=_which)
+        rows = _sprio(fields=["user", "fairshare"], runner=_run, which_func=_which)
     except SlurmUnavailableError:
         try:
-            rows = _sshare({"user": "user", "fairshare": "fairshare"}, runner=_run, which_func=_which)
+            rows = _sshare(fields=["user", "fairshare"], runner=_run, which_func=_which)
         except SlurmUnavailableError:
             return {}
 
@@ -192,15 +194,11 @@ def job_history() -> dict[str, dict[str, int]]:
     now = datetime.now()
     start = now - timedelta(hours=24)
     rows = _sacct(
-        {"user": "User", "state": "State"},
-        args=[
-            "-a",
-            "-X",
-            "-S",
-            start.strftime("%Y-%m-%dT%H:%M:%S"),
-            "-E",
-            now.strftime("%Y-%m-%dT%H:%M:%S"),
-        ],
+        fields=["user", "state"],
+        all_users=True,
+        allocations=True,
+        start_time=start.strftime("%Y-%m-%dT%H:%M:%S"),
+        end_time=now.strftime("%Y-%m-%dT%H:%M:%S"),
         runner=_run,
         which_func=_which,
     )
