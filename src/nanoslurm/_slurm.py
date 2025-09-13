@@ -2,10 +2,8 @@ from __future__ import annotations
 
 """Thin wrappers around SLURM commands with explicit keyword-based options."""
 
-import os
-from subprocess import CompletedProcess
-from pathlib import Path
-from typing import Sequence, List, Dict, Optional
+from shutil import which
+from typing import Sequence
 
 from .utils import run_command
 
@@ -14,32 +12,11 @@ class SlurmUnavailableError(RuntimeError):
     """Raised when required SLURM commands are missing."""
 
 
-def which(name: str) -> bool:
-    for path in os.environ.get("PATH", "").split(os.pathsep):
-        candidate = Path(path) / name
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return True
-    return False
-
-
-def require(cmd: str, which_func=which) -> None:
-    if not which_func(cmd):
+def require(cmd: str) -> None:
+    if not which(cmd):
         raise SlurmUnavailableError(
             f"Required command '{cmd}' not found. Is this a SLURM environment?"
         )
-
-
-def run(cmd: Sequence[str], check: bool = True) -> CompletedProcess:
-    """Execute *cmd* using :func:`utils.cmd.run_command`.
-
-    This wrapper ensures consistent logging and retry behaviour across the
-    project while maintaining the original return type from
-    :func:`subprocess.run`.
-    """
-
-    return run_command(cmd, check=check)
-
-
 def normalize_state(state: str) -> str:
     """Normalize a SLURM state string.
 
@@ -56,17 +33,14 @@ def normalize_state(state: str) -> str:
 def _table(
     cmd: Sequence[str],
     keys: Sequence[str],
-    sep: Optional[str],
+    sep: str | None,
     *,
-    runner=run,
-) -> List[Dict[str, str]]:
+    runner=run_command,
+) -> list[dict[str, str]]:
     out = runner(cmd, check=False).stdout
-    rows: List[Dict[str, str]] = []
+    rows: list[dict[str, str]] = []
     for line in out.splitlines():
-        if sep is None:
-            parts = line.split()
-        else:
-            parts = line.split(sep)
+        parts = line.split() if sep is None else line.split(sep)
         if len(parts) != len(keys):
             continue
         rows.append({k: v for k, v in zip(keys, parts)})
@@ -98,12 +72,11 @@ def squeue(
     partitions: Sequence[str] | None = None,
     states: Sequence[str] | None = None,
     sort: str | None = None,
-    runner=run,
-    which_func=which,
+    runner=run_command,
     check: bool = True,
-) -> List[Dict[str, str]]:
+) -> list[dict[str, str]]:
     if check:
-        require("squeue", which_func=which_func)
+        require("squeue")
 
     cmd = ["squeue", "-h"]
     if jobs:
@@ -148,12 +121,11 @@ def sacct(
     end_time: str | None = None,
     all_users: bool = False,
     allocations: bool = False,
-    runner=run,
-    which_func=which,
+    runner=run_command,
     check: bool = True,
-) -> List[Dict[str, str]]:
+) -> list[dict[str, str]]:
     if check:
-        require("sacct", which_func=which_func)
+        require("sacct")
 
     cmd = ["sacct", "-n"]
     if allocations:
@@ -197,12 +169,11 @@ def sinfo(
     partitions: Sequence[str] | None = None,
     states: Sequence[str] | None = None,
     all_partitions: bool = False,
-    runner=run,
-    which_func=which,
+    runner=run_command,
     check: bool = True,
-) -> List[Dict[str, str]]:
+) -> list[dict[str, str]]:
     if check:
-        require("sinfo", which_func=which_func)
+        require("sinfo")
 
     cmd = ["sinfo", "-h"]
     if partitions:
@@ -233,12 +204,11 @@ def sprio(
     fields: Sequence[str] = ("job_id", "user", "priority"),
     jobs: Sequence[int] | None = None,
     users: Sequence[str] | None = None,
-    runner=run,
-    which_func=which,
+    runner=run_command,
     check: bool = True,
-) -> List[Dict[str, str]]:
-    if check and not which_func("sprio"):
-        raise SlurmUnavailableError("sprio command not found on PATH")
+) -> list[dict[str, str]]:
+    if check:
+        require("sprio")
 
     cmd = ["sprio", "-n"]
     if jobs:
@@ -266,12 +236,11 @@ def sshare(
     fields: Sequence[str] = ("user", "fairshare"),
     users: Sequence[str] | None = None,
     accounts: Sequence[str] | None = None,
-    runner=run,
-    which_func=which,
+    runner=run_command,
     check: bool = True,
-) -> List[Dict[str, str]]:
-    if check and not which_func("sshare"):
-        raise SlurmUnavailableError("sshare command not found on PATH")
+) -> list[dict[str, str]]:
+    if check:
+        require("sshare")
 
     cmd = ["sshare", "-n"]
     if users:
@@ -286,7 +255,6 @@ def sshare(
 
 __all__ = [
     "SlurmUnavailableError",
-    "run",
     "normalize_state",
     "which",
     "require",
