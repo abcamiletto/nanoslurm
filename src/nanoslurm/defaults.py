@@ -1,13 +1,10 @@
-from __future__ import annotations
-
 from pathlib import Path
-from typing import Dict
 
 import yaml
 from platformdirs import user_config_dir
 
 # Allowed keys and their types for default configuration
-KEY_TYPES: Dict[str, type] = {
+KEY_TYPES: dict[str, type] = {
     "name": str,
     "cluster": str,
     "time": str,
@@ -21,7 +18,7 @@ KEY_TYPES: Dict[str, type] = {
 }
 
 # Minimal built-in defaults; most values must be supplied via CLI or config
-DEFAULTS: Dict[str, object] = {
+DEFAULTS: dict[str, object] = {
     "name": "job",
     "stdout_file": "./slurm_logs/%j.txt",
     "stderr_file": "./slurm_logs/%j.err",
@@ -32,7 +29,7 @@ DEFAULTS: Dict[str, object] = {
 CONFIG_PATH = Path(user_config_dir("nanoslurm")) / "config.yaml"
 
 
-def load_defaults() -> Dict[str, object]:
+def load_defaults() -> dict[str, object]:
     """Return defaults merged with any saved configuration."""
     data = DEFAULTS.copy()
     if CONFIG_PATH.exists():
@@ -45,7 +42,7 @@ def load_defaults() -> Dict[str, object]:
     return data
 
 
-def save_defaults(cfg: Dict[str, object]) -> None:
+def save_defaults(cfg: dict[str, object]) -> None:
     """Persist provided configuration to :data:`CONFIG_PATH`."""
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     CONFIG_PATH.write_text(yaml.safe_dump(cfg, sort_keys=False))
