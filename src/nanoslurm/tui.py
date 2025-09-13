@@ -32,7 +32,6 @@ Screen {
 }
 .partition-pane {
     layout: vertical;
-    gap: 1;
 }
 .partition-pane DataTable {
     width: 100%;
@@ -40,8 +39,8 @@ Screen {
 """
 
 
-class JobApp(App):
-    """Textual app to display current user's SLURM jobs."""
+class DashboardApp(App):
+    """Combined TUI showing user jobs and cluster statistics."""
 
     CSS = BASE_CSS
     BINDINGS = [
@@ -58,65 +57,30 @@ class JobApp(App):
 
     def compose(self) -> ComposeResult:  # pragma: no cover - Textual composition
         yield Header()
-        self.table: DataTable = DataTable()
-        yield self.table
+        with TabbedContent() as self.main_tabs:
+            with TabPane("Jobs"):
+                self.job_table = DataTable()
+                yield self.job_table
+            with TabPane("Cluster"):
+                self.cluster_tabs = TabbedContent()
+                with self.cluster_tabs:
+                    with TabPane("Summary"):
+                        with Grid(id="summary-grid"):
+                            self.partition_table = DataTable()
+                            self.user_table = DataTable()
+                            self.state_table = DataTable()
+                            self.node_table = DataTable()
+                            yield self.partition_table
+                            yield self.user_table
+                            yield self.state_table
+                            yield self.node_table
         yield Footer()
 
     def on_mount(self) -> None:  # pragma: no cover - runtime hook
-        self.table.add_columns("ID", "Name", "State")
-        self.table.show_cursor = True
-        self.table.cursor_type = "row"
-        self.refresh_table()
-        self.set_interval(2.0, self.refresh_table)
-        self.set_focus(self.table)
+        self.job_table.add_columns("ID", "Name", "State")
+        self.job_table.show_cursor = True
+        self.job_table.cursor_type = "row"
 
-    def action_cursor_left(self) -> None:  # pragma: no cover - Textual action
-        self.table.action_cursor_left()
-
-    def action_cursor_right(self) -> None:  # pragma: no cover - Textual action
-        self.table.action_cursor_right()
-
-    def action_cursor_up(self) -> None:  # pragma: no cover - Textual action
-        self.table.action_cursor_up()
-
-    def action_cursor_down(self) -> None:  # pragma: no cover - Textual action
-        self.table.action_cursor_down()
-
-    def refresh_table(self) -> None:  # pragma: no cover - runtime hook
-        rows = list_jobs(os.environ.get("USER"))
-        self.table.clear()
-        for job in rows:
-            self.table.add_row(str(job.id), job.name, job.last_status or job.status)
-
-
-class ClusterApp(App):
-    """Textual app to display cluster-wide job statistics."""
-
-    CSS = BASE_CSS
-    BINDINGS = [("q", "quit", "Quit")]
-
-    def __init__(self, **kwargs):
-        kwargs.setdefault("ansi_color", True)
-        super().__init__(**kwargs)
-
-    def compose(self) -> ComposeResult:  # pragma: no cover - Textual composition
-        yield Header()
-        self.tabs = TabbedContent()
-        with self.tabs:
-            with TabPane("Summary"):
-                with Grid(id="summary-grid"):
-                    self.partition_table = DataTable()
-                    self.user_table = DataTable()
-                    self.state_table = DataTable()
-                    self.node_table = DataTable()
-                    yield self.partition_table
-                    yield self.user_table
-                    yield self.state_table
-                    yield self.node_table
-        yield self.tabs
-        yield Footer()
-
-    def on_mount(self) -> None:  # pragma: no cover - runtime hook
         self.node_table.add_columns("State", "Nodes", "Percent")
         self.state_table.add_columns("State", "Jobs", "Percent")
         self.partition_table.add_columns("Partition", "Jobs", "Running", "Pending", "Share%", "Util%")
@@ -130,11 +94,42 @@ class ClusterApp(App):
             "Succeeded (24h)",
             "Failed (24h)",
         )
-        self.partition_tables: dict[str, dict[str, DataTable]] = {}
-        self.refresh_tables()
-        self.set_interval(2.0, self.refresh_tables)
 
-    def refresh_tables(self) -> None:  # pragma: no cover - runtime hook
+        self.partition_tables: dict[str, dict[str, DataTable]] = {}
+
+        self.refresh_jobs()
+        self.refresh_cluster()
+        self.set_interval(2.0, self.refresh_jobs)
+        self.set_interval(2.0, self.refresh_cluster)
+        self.set_focus(self.job_table)
+
+    def _focused_table(self) -> DataTable | None:
+        widget = self.focused
+        return widget if isinstance(widget, DataTable) else None
+
+    def action_cursor_left(self) -> None:  # pragma: no cover - Textual action
+        if (table := self._focused_table()) is not None:
+            table.action_cursor_left()
+
+    def action_cursor_right(self) -> None:  # pragma: no cover - Textual action
+        if (table := self._focused_table()) is not None:
+            table.action_cursor_right()
+
+    def action_cursor_up(self) -> None:  # pragma: no cover - Textual action
+        if (table := self._focused_table()) is not None:
+            table.action_cursor_up()
+
+    def action_cursor_down(self) -> None:  # pragma: no cover - Textual action
+        if (table := self._focused_table()) is not None:
+            table.action_cursor_down()
+
+    def refresh_jobs(self) -> None:  # pragma: no cover - runtime hook
+        rows = list_jobs(os.environ.get("USER"))
+        self.job_table.clear()
+        for job in rows:
+            self.job_table.add_row(str(job.id), job.name, job.last_status or job.status)
+
+    def refresh_cluster(self) -> None:  # pragma: no cover - runtime hook
         node_counts = node_state_counts()
         total_nodes = sum(node_counts.values()) or 1
 
@@ -190,7 +185,7 @@ class ClusterApp(App):
                 user_table = DataTable()
                 user_table.add_columns("User", "Jobs", "Running", "Pending", "Share%")
                 pane = TabPane(part, Vertical(stats_table, user_table, classes="partition-pane"))
-                self.tabs.add_pane(pane)
+                self.cluster_tabs.add_pane(pane)
                 self.partition_tables[part] = {"stats": stats_table, "users": user_table}
 
         for part, tables in self.partition_tables.items():
@@ -289,5 +284,5 @@ class SummaryApp(App):
         _add_rows(self.week_table, week_rows)
 
 
-__all__ = ["JobApp", "ClusterApp", "SummaryApp"]
+__all__ = ["DashboardApp", "SummaryApp"]
 
