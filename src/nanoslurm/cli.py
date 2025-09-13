@@ -78,25 +78,17 @@ def run(
         console.print(f"stderr: {job.stderr_path}")
 
 
-@app.command("jobs")
-def jobs() -> None:
-    """Launch a Textual TUI to view current user's jobs."""
-    from .tui import JobApp
+@app.command("monitor")
+def monitor() -> None:
+    """Launch a dashboard for jobs and cluster statistics."""
+    from .tui import DashboardApp
 
-    JobApp().run()
-
-
-@app.command("stats")
-def stats() -> None:
-    """Launch a Textual TUI to view cluster-wide statistics."""
-    from .tui import ClusterApp
-
-    ClusterApp().run()
+    DashboardApp().run()
 
 
-@app.command("summary")
-def summary() -> None:
-    """Launch a Textual TUI summarizing recent completions."""
+@app.command("history")
+def history() -> None:
+    """Launch a TUI summarizing recent job completions."""
     from .tui import SummaryApp
 
     SummaryApp().run()

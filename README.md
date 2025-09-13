@@ -82,21 +82,18 @@ Most job parameters (such as cluster, time, or resource counts) have no built-in
 defaults. Set them explicitly on the command line or persist them via
 `nslurm defaults set`.
 
-View current jobs in an interactive TUI:
+View jobs and cluster statistics in an interactive TUI:
 
 ```bash
-nslurm jobs
+nslurm monitor
 ```
 
 Use the arrow keys or `h`, `j`, `k`, `l` to move around and `q` to quit.
 
-
-View cluster-wide statistics with a summary overview and per-partition tabs.
-The TUI shows node states, job states, user activity, and job counts by partition with percentages:
-
+View recent job completions:
 
 ```bash
-nslurm stats
+nslurm history
 ```
 
 ## Releasing
