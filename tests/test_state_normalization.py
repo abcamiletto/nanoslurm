@@ -32,7 +32,7 @@ def test_list_jobs_state_normalization(monkeypatch):
         ]
 
     monkeypatch.setattr(job, "_squeue", fake_squeue)
-    monkeypatch.setattr(job, "_which", lambda cmd: cmd == "squeue")
+    monkeypatch.setattr(job, "which", lambda cmd: cmd == "squeue")
     rows = job.list_jobs()
     assert rows[0].last_status == "RUNNING"
 
@@ -59,7 +59,7 @@ def test_job_history_state_normalization(monkeypatch):
         ]
 
     monkeypatch.setattr(stats, "_sacct", fake_sacct)
-    monkeypatch.setattr(stats, "_which", lambda cmd: cmd == "sacct")
+    monkeypatch.setattr(stats, "which", lambda cmd: cmd == "sacct")
     result = stats.job_history()
     assert result == {
         "alice": {"completed": 1, "failed": 1},

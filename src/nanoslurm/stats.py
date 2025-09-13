@@ -2,19 +2,16 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime, timedelta
+from shutil import which
 
 from ._slurm import (
-    SlurmUnavailableError,
     normalize_state,
-    require as _require,
     sacct as _sacct,
     squeue as _squeue,
     sinfo as _sinfo,
     sprio as _sprio,
     sshare as _sshare,
-    which as _which,
 )
-from .utils import run_command as _run
 from .job import _TERMINAL
 
 
@@ -99,7 +96,6 @@ def _partition_caps() -> dict[str, dict[str, int]]:
     rows = _sinfo(
         fields=["part", "cpus", "gres", "nodes"],
         all_partitions=True,
-        runner=_run,
         check=False,
     )
     caps: dict[str, dict[str, int]] = {}
@@ -158,13 +154,10 @@ def partition_utilization() -> dict[str, float]:
 
 def fairshare_scores() -> dict[str, float]:
     """Return a mapping of users to their fair-share scores."""
-    rows: list[dict[str, str]]
-    if _which("sprio"):
-        rows = _sprio(fields=["user", "fairshare"], runner=_run, check=False)
-    elif _which("sshare"):
-        rows = _sshare(fields=["user", "fairshare"], runner=_run, check=False)
-    else:
+    cmd = "sprio" if which("sprio") else "sshare" if which("sshare") else None
+    if not cmd:
         return {}
+    rows = (_sprio if cmd == "sprio" else _sshare)(fields=["user", "fairshare"], check=False)
 
     scores: dict[str, float] = {}
     for r in rows:
@@ -179,7 +172,7 @@ def fairshare_scores() -> dict[str, float]:
 
 def job_history() -> dict[str, dict[str, int]]:
     """Return per-user job completion statistics for the last 24 hours."""
-    if not _which("sacct"):
+    if not which("sacct"):
         return {}
 
     now = datetime.now()

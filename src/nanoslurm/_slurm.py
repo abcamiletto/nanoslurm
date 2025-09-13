@@ -256,7 +256,6 @@ def sshare(
 __all__ = [
     "SlurmUnavailableError",
     "normalize_state",
-    "which",
     "require",
     "squeue",
     "sacct",
