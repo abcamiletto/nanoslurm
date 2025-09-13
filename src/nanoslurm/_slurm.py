@@ -2,24 +2,15 @@ from __future__ import annotations
 
 """Thin wrappers around SLURM commands with explicit keyword-based options."""
 
-import os
 from subprocess import CompletedProcess
-from pathlib import Path
-from typing import Sequence, List, Dict, Optional
+from shutil import which
+from typing import Sequence
 
 from .utils import run_command
 
 
 class SlurmUnavailableError(RuntimeError):
     """Raised when required SLURM commands are missing."""
-
-
-def which(name: str) -> bool:
-    for path in os.environ.get("PATH", "").split(os.pathsep):
-        candidate = Path(path) / name
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return True
-    return False
 
 
 def require(cmd: str, which_func=which) -> None:
@@ -56,17 +47,14 @@ def normalize_state(state: str) -> str:
 def _table(
     cmd: Sequence[str],
     keys: Sequence[str],
-    sep: Optional[str],
+    sep: str | None,
     *,
     runner=run,
-) -> List[Dict[str, str]]:
+) -> list[dict[str, str]]:
     out = runner(cmd, check=False).stdout
-    rows: List[Dict[str, str]] = []
+    rows: list[dict[str, str]] = []
     for line in out.splitlines():
-        if sep is None:
-            parts = line.split()
-        else:
-            parts = line.split(sep)
+        parts = line.split() if sep is None else line.split(sep)
         if len(parts) != len(keys):
             continue
         rows.append({k: v for k, v in zip(keys, parts)})
@@ -101,7 +89,7 @@ def squeue(
     runner=run,
     which_func=which,
     check: bool = True,
-) -> List[Dict[str, str]]:
+) -> list[dict[str, str]]:
     if check:
         require("squeue", which_func=which_func)
 
@@ -151,7 +139,7 @@ def sacct(
     runner=run,
     which_func=which,
     check: bool = True,
-) -> List[Dict[str, str]]:
+) -> list[dict[str, str]]:
     if check:
         require("sacct", which_func=which_func)
 
@@ -200,7 +188,7 @@ def sinfo(
     runner=run,
     which_func=which,
     check: bool = True,
-) -> List[Dict[str, str]]:
+) -> list[dict[str, str]]:
     if check:
         require("sinfo", which_func=which_func)
 
@@ -236,7 +224,7 @@ def sprio(
     runner=run,
     which_func=which,
     check: bool = True,
-) -> List[Dict[str, str]]:
+) -> list[dict[str, str]]:
     if check and not which_func("sprio"):
         raise SlurmUnavailableError("sprio command not found on PATH")
 
@@ -269,7 +257,7 @@ def sshare(
     runner=run,
     which_func=which,
     check: bool = True,
-) -> List[Dict[str, str]]:
+) -> list[dict[str, str]]:
     if check and not which_func("sshare"):
         raise SlurmUnavailableError("sshare command not found on PATH")
 

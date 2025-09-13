@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime, timedelta
-from typing import Optional
 
 from ._slurm import (
     SlurmUnavailableError,
