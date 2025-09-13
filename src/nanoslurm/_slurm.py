@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+"""Thin wrappers around SLURM commands with explicit keyword-based options."""
+
 import os
 from subprocess import CompletedProcess
 from pathlib import Path
-from typing import Mapping, Sequence, List, Dict, Optional
+from typing import Sequence, List, Dict, Optional
 
 from .utils import run_command
 
@@ -71,79 +73,215 @@ def _table(
     return rows
 
 
+# ---------------------------------------------------------------------------
+# squeue
+
+SQUEUE_FIELDS = {
+    "id": "%i",
+    "name": "%j",
+    "user": "%u",
+    "partition": "%P",
+    "state": "%T",
+    "submit": "%V",
+    "start": "%S",
+    "cpus": "%C",
+    "gres": "%b",
+    "nodelist": "%R",
+}
+
+
 def squeue(
-    fields: Mapping[str, str],
-    args: Sequence[str] = (),
     *,
+    fields: Sequence[str] = ("id", "name", "user", "state"),
+    jobs: Sequence[int] | None = None,
+    users: Sequence[str] | None = None,
+    partitions: Sequence[str] | None = None,
+    states: Sequence[str] | None = None,
+    sort: str | None = None,
     runner=run,
     which_func=which,
     check: bool = True,
 ) -> List[Dict[str, str]]:
     if check:
         require("squeue", which_func=which_func)
-    fmt = "|".join(fields.values())
-    cmd = ["squeue", "-h", "-o", fmt, *args]
-    return _table(cmd, list(fields.keys()), "|", runner=runner)
+
+    cmd = ["squeue", "-h"]
+    if jobs:
+        cmd += ["-j", ",".join(map(str, jobs))]
+    if users:
+        cmd += ["-u", ",".join(users)]
+    if partitions:
+        cmd += ["-p", ",".join(partitions)]
+    if states:
+        cmd += ["-t", ",".join(states)]
+    if sort:
+        cmd += ["--sort", sort]
+
+    fmt = "|".join(SQUEUE_FIELDS[f] for f in fields)
+    cmd += ["-o", fmt]
+    return _table(cmd, list(fields), "|", runner=runner)
+
+
+# ---------------------------------------------------------------------------
+# sacct
+
+SACCT_FIELDS = {
+    "id": "JobIDRaw",
+    "name": "JobName",
+    "user": "User",
+    "partition": "Partition",
+    "state": "State",
+    "submit": "Submit",
+    "start": "Start",
+    "end": "End",
+}
 
 
 def sacct(
-    fields: Mapping[str, str],
-    args: Sequence[str] = (),
     *,
+    fields: Sequence[str] = ("id", "name", "user", "state"),
+    jobs: Sequence[int] | None = None,
+    users: Sequence[str] | None = None,
+    partitions: Sequence[str] | None = None,
+    states: Sequence[str] | None = None,
+    start_time: str | None = None,
+    end_time: str | None = None,
+    all_users: bool = False,
+    allocations: bool = False,
     runner=run,
     which_func=which,
     check: bool = True,
 ) -> List[Dict[str, str]]:
     if check:
         require("sacct", which_func=which_func)
-    fmt = ",".join(fields.values())
-    cmd = ["sacct", "-n", "-o", fmt, "--parsable2", *args]
-    return _table(cmd, list(fields.keys()), "|", runner=runner)
+
+    cmd = ["sacct", "-n"]
+    if allocations:
+        cmd.append("-X")
+    if all_users:
+        cmd.append("-a")
+    if jobs:
+        cmd += ["-j", ",".join(map(str, jobs))]
+    if users:
+        cmd += ["-u", ",".join(users)]
+    if partitions:
+        cmd += ["-p", ",".join(partitions)]
+    if states:
+        cmd += ["-s", ",".join(states)]
+    if start_time:
+        cmd += ["-S", start_time]
+    if end_time:
+        cmd += ["-E", end_time]
+
+    fmt = ",".join(SACCT_FIELDS[f] for f in fields)
+    cmd += ["-o", fmt, "--parsable2"]
+    return _table(cmd, list(fields), "|", runner=runner)
+
+
+# ---------------------------------------------------------------------------
+# sinfo
+
+SINFO_FIELDS = {
+    "part": "%P",
+    "state": "%T",
+    "count": "%D",
+    "cpus": "%C",
+    "gres": "%G",
+    "nodes": "%D",
+}
 
 
 def sinfo(
-    fields: Mapping[str, str],
-    args: Sequence[str] = (),
     *,
+    fields: Sequence[str] = ("state", "count"),
+    partitions: Sequence[str] | None = None,
+    states: Sequence[str] | None = None,
+    all_partitions: bool = False,
     runner=run,
     which_func=which,
     check: bool = True,
 ) -> List[Dict[str, str]]:
     if check:
         require("sinfo", which_func=which_func)
-    fmt = "|".join(fields.values())
-    cmd = ["sinfo", "-h", "-o", fmt, *args]
-    return _table(cmd, list(fields.keys()), "|", runner=runner)
+
+    cmd = ["sinfo", "-h"]
+    if partitions:
+        cmd += ["-p", ",".join(partitions)]
+    if states:
+        cmd += ["-t", ",".join(states)]
+    if all_partitions:
+        cmd.append("-a")
+
+    fmt = "|".join(SINFO_FIELDS[f] for f in fields)
+    cmd += ["-o", fmt]
+    return _table(cmd, list(fields), "|", runner=runner)
+
+
+# ---------------------------------------------------------------------------
+# sprio
+
+SPRIO_FIELDS = {
+    "job_id": "jobid",
+    "user": "user",
+    "priority": "priority",
+    "fairshare": "fairshare",
+}
 
 
 def sprio(
-    fields: Mapping[str, str],
-    args: Sequence[str] = (),
     *,
+    fields: Sequence[str] = ("job_id", "user", "priority"),
+    jobs: Sequence[int] | None = None,
+    users: Sequence[str] | None = None,
     runner=run,
     which_func=which,
     check: bool = True,
 ) -> List[Dict[str, str]]:
     if check and not which_func("sprio"):
         raise SlurmUnavailableError("sprio command not found on PATH")
-    fmt = ",".join(fields.values())
-    cmd = ["sprio", "-n", "-o", fmt, *args]
-    return _table(cmd, list(fields.keys()), None, runner=runner)
+
+    cmd = ["sprio", "-n"]
+    if jobs:
+        cmd += ["-j", ",".join(map(str, jobs))]
+    if users:
+        cmd += ["-u", ",".join(users)]
+
+    fmt = ",".join(SPRIO_FIELDS[f] for f in fields)
+    cmd += ["-o", fmt]
+    return _table(cmd, list(fields), None, runner=runner)
+
+
+# ---------------------------------------------------------------------------
+# sshare
+
+SSHARE_FIELDS = {
+    "user": "user",
+    "account": "account",
+    "fairshare": "fairshare",
+}
 
 
 def sshare(
-    fields: Mapping[str, str],
-    args: Sequence[str] = (),
     *,
+    fields: Sequence[str] = ("user", "fairshare"),
+    users: Sequence[str] | None = None,
+    accounts: Sequence[str] | None = None,
     runner=run,
     which_func=which,
     check: bool = True,
 ) -> List[Dict[str, str]]:
     if check and not which_func("sshare"):
         raise SlurmUnavailableError("sshare command not found on PATH")
-    fmt = ",".join(fields.values())
-    cmd = ["sshare", "-n", "-o", fmt, *args]
-    return _table(cmd, list(fields.keys()), None, runner=runner)
+
+    cmd = ["sshare", "-n"]
+    if users:
+        cmd += ["-u", ",".join(users)]
+    if accounts:
+        cmd += ["-A", ",".join(accounts)]
+
+    fmt = ",".join(SSHARE_FIELDS[f] for f in fields)
+    cmd += ["-o", fmt]
+    return _table(cmd, list(fields), None, runner=runner)
 
 
 __all__ = [

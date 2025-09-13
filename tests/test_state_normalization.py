@@ -18,14 +18,14 @@ def test_normalize_state_cases():
 
 
 def test_list_jobs_state_normalization(monkeypatch):
-    def fake_squeue(fields, args=(), runner=None, which_func=None):
+    def fake_squeue(*, fields, **kwargs):
         return [
             {
                 "id": "1",
                 "name": "n",
                 "user": "u",
                 "partition": "p",
-                "status": "RUNNING* (Priority)",
+                "state": "RUNNING* (Priority)",
                 "submit": "",
                 "start": "",
             }
@@ -38,7 +38,7 @@ def test_list_jobs_state_normalization(monkeypatch):
 
 
 def test_node_state_counts_normalization(monkeypatch):
-    def fake_sinfo(fields, args=(), runner=None, which_func=None, check=True):
+    def fake_sinfo(*, fields, **kwargs):
         return [
             {"state": "idle*", "count": "5"},
             {"state": "alloc+", "count": "3"},
@@ -50,7 +50,7 @@ def test_node_state_counts_normalization(monkeypatch):
 
 
 def test_job_history_state_normalization(monkeypatch):
-    def fake_sacct(fields, args=(), runner=None, which_func=None):
+    def fake_sacct(*, fields, **kwargs):
         return [
             {"user": "alice", "state": "COMPLETED"},
             {"user": "bob", "state": "FAILED+"},
