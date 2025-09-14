@@ -2,11 +2,10 @@ from __future__ import annotations
 
 """Thin wrappers around SLURM commands with explicit keyword-based options."""
 
-from subprocess import CompletedProcess
 from shutil import which
 from typing import Sequence
 
-from .utils import run_command
+from .utils.cmd import run_command
 
 
 class SlurmUnavailableError(RuntimeError):
@@ -18,19 +17,6 @@ def require(cmd: str, which_func=which) -> None:
         raise SlurmUnavailableError(
             f"Required command '{cmd}' not found. Is this a SLURM environment?"
         )
-
-
-def run(cmd: Sequence[str], check: bool = True) -> CompletedProcess:
-    """Execute *cmd* using :func:`utils.cmd.run_command`.
-
-    This wrapper ensures consistent logging and retry behaviour across the
-    project while maintaining the original return type from
-    :func:`subprocess.run`.
-    """
-
-    return run_command(cmd, check=check)
-
-
 def normalize_state(state: str) -> str:
     """Normalize a SLURM state string.
 
@@ -49,7 +35,7 @@ def _table(
     keys: Sequence[str],
     sep: str | None,
     *,
-    runner=run,
+    runner=run_command,
 ) -> list[dict[str, str]]:
     out = runner(cmd, check=False).stdout
     rows: list[dict[str, str]] = []
@@ -86,7 +72,7 @@ def squeue(
     partitions: Sequence[str] | None = None,
     states: Sequence[str] | None = None,
     sort: str | None = None,
-    runner=run,
+    runner=run_command,
     which_func=which,
     check: bool = True,
 ) -> list[dict[str, str]]:
@@ -136,7 +122,7 @@ def sacct(
     end_time: str | None = None,
     all_users: bool = False,
     allocations: bool = False,
-    runner=run,
+    runner=run_command,
     which_func=which,
     check: bool = True,
 ) -> list[dict[str, str]]:
@@ -185,7 +171,7 @@ def sinfo(
     partitions: Sequence[str] | None = None,
     states: Sequence[str] | None = None,
     all_partitions: bool = False,
-    runner=run,
+    runner=run_command,
     which_func=which,
     check: bool = True,
 ) -> list[dict[str, str]]:
@@ -221,7 +207,7 @@ def sprio(
     fields: Sequence[str] = ("job_id", "user", "priority"),
     jobs: Sequence[int] | None = None,
     users: Sequence[str] | None = None,
-    runner=run,
+    runner=run_command,
     which_func=which,
     check: bool = True,
 ) -> list[dict[str, str]]:
@@ -254,7 +240,7 @@ def sshare(
     fields: Sequence[str] = ("user", "fairshare"),
     users: Sequence[str] | None = None,
     accounts: Sequence[str] | None = None,
-    runner=run,
+    runner=run_command,
     which_func=which,
     check: bool = True,
 ) -> list[dict[str, str]]:
@@ -274,7 +260,6 @@ def sshare(
 
 __all__ = [
     "SlurmUnavailableError",
-    "run",
     "normalize_state",
     "which",
     "require",

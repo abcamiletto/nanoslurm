@@ -17,8 +17,7 @@ def test_partition_caps_gpu_total(monkeypatch):
     def fake_run(cmd, check=False):
         return Dummy(stdout=sinfo_out)
 
-    monkeypatch.setattr(stats, "_run", fake_run)
-    monkeypatch.setattr(stats, "_require", lambda cmd: None)
+    monkeypatch.setattr(stats, "run_command", fake_run)
 
     caps = stats._partition_caps()
     assert caps["p1"]["gpus"] == 16

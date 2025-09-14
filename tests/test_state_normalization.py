@@ -18,7 +18,7 @@ def test_normalize_state_cases():
 
 
 def test_list_jobs_state_normalization(monkeypatch):
-    def fake_squeue(*, fields, **kwargs):
+    def fake_fetch(*, fields, **kwargs):
         return [
             {
                 "id": "1",
@@ -31,8 +31,7 @@ def test_list_jobs_state_normalization(monkeypatch):
             }
         ]
 
-    monkeypatch.setattr(job, "_squeue", fake_squeue)
-    monkeypatch.setattr(job, "_which", lambda cmd: cmd == "squeue")
+    monkeypatch.setattr(job, "_fetch", fake_fetch)
     rows = job.list_jobs()
     assert rows[0].last_status == "RUNNING"
 
