@@ -6,8 +6,6 @@ from datetime import datetime, timedelta
 from ._slurm import (
     SlurmUnavailableError,
     normalize_state,
-    require as _require,
-    run as _run,
     sacct as _sacct,
     squeue as _squeue,
     sinfo as _sinfo,
@@ -15,12 +13,13 @@ from ._slurm import (
     sshare as _sshare,
     which as _which,
 )
+from .utils.cmd import run_command
 from .job import _TERMINAL
 
 
 def node_state_counts() -> dict[str, int]:
     """Return a mapping of node state to count."""
-    rows = _sinfo(fields=["state", "count"], runner=_run, which_func=_which)
+    rows = _sinfo(fields=["state", "count"], runner=run_command, which_func=_which)
     counts: Counter[str] = Counter()
     for r in rows:
         state = r.get("state", "")
@@ -37,7 +36,7 @@ def partition_node_state_counts() -> dict[str, dict[str, int]]:
     rows = _sinfo(
         fields=["part", "state", "count"],
         all_partitions=True,
-        runner=_run,
+        runner=run_command,
         which_func=_which,
     )
     counts: dict[str, Counter[str]] = {}
@@ -65,7 +64,7 @@ def recent_completions(span: str = "day", count: int = 7) -> list[tuple[str, int
         states=["CD"],
         start_time=start,
         allocations=True,
-        runner=_run,
+        runner=run_command,
         which_func=_which,
     )
     counts: Counter[str] = Counter()
@@ -103,7 +102,7 @@ def _partition_caps() -> dict[str, dict[str, int]]:
     rows = _sinfo(
         fields=["part", "cpus", "gres", "nodes"],
         all_partitions=True,
-        runner=_run,
+        runner=run_command,
         which_func=_which,
         check=False,
     )
@@ -135,7 +134,7 @@ def partition_utilization() -> dict[str, float]:
     rows = _squeue(
         fields=["part", "cpus", "gres"],
         states=["RUNNING"],
-        runner=_run,
+        runner=run_command,
         which_func=_which,
     )
     usage: dict[str, dict[str, int]] = {}
@@ -167,10 +166,10 @@ def fairshare_scores() -> dict[str, float]:
     """Return a mapping of users to their fair-share scores."""
     rows: list[dict[str, str]]
     try:
-        rows = _sprio(fields=["user", "fairshare"], runner=_run, which_func=_which)
+        rows = _sprio(fields=["user", "fairshare"], runner=run_command, which_func=_which)
     except SlurmUnavailableError:
         try:
-            rows = _sshare(fields=["user", "fairshare"], runner=_run, which_func=_which)
+            rows = _sshare(fields=["user", "fairshare"], runner=run_command, which_func=_which)
         except SlurmUnavailableError:
             return {}
 
@@ -198,7 +197,7 @@ def job_history() -> dict[str, dict[str, int]]:
         allocations=True,
         start_time=start.strftime("%Y-%m-%dT%H:%M:%S"),
         end_time=now.strftime("%Y-%m-%dT%H:%M:%S"),
-        runner=_run,
+        runner=run_command,
         which_func=_which,
     )
     stats: dict[str, dict[str, int]] = {}

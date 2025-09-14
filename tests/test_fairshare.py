@@ -12,7 +12,7 @@ def test_fairshare_scores_sprio(monkeypatch):
     monkeypatch.setattr(stats, "_which", lambda cmd: cmd == "sprio")
     monkeypatch.setattr(
         stats,
-        "_run",
+        "run_command",
         lambda cmd, check=False: types.SimpleNamespace(stdout="alice 0.5\nbob 0.1\n"),
     )
     assert fairshare_scores() == {"alice": 0.5, "bob": 0.1}
@@ -22,7 +22,7 @@ def test_fairshare_scores_sshare(monkeypatch):
     monkeypatch.setattr(stats, "_which", lambda cmd: cmd == "sshare")
     monkeypatch.setattr(
         stats,
-        "_run",
+        "run_command",
         lambda cmd, check=False: types.SimpleNamespace(stdout="carol 0.7\n"),
     )
     assert fairshare_scores() == {"carol": 0.7}

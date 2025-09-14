@@ -6,22 +6,52 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Sequence
 
 from ._slurm import (
     SlurmUnavailableError,
     normalize_state,
     require as _require,
-    run as _run,
     sacct as _sacct,
     squeue as _squeue,
     which as _which,
 )
+from .utils.cmd import run_command
 
 RUN_SH = Path(__file__).with_name("run.sh")
 
 _TERMINAL = {"COMPLETED", "FAILED", "CANCELLED", "TIMEOUT", "PREEMPTED", "BOOT_FAIL", "NODE_FAIL"}
 _RUNNINGISH = {"PENDING", "CONFIGURING", "RUNNING", "COMPLETING", "STAGE_OUT", "SUSPENDED", "RESV_DEL_HOLD"}
+
+
+def _fetch(
+    *,
+    fields: Sequence[str],
+    jobs: Sequence[int] | None = None,
+    users: Sequence[str] | None = None,
+    which_func=_which,
+    runner=run_command,
+) -> list[dict[str, str]]:
+    if which_func("squeue"):
+        return _squeue(
+            fields=fields,
+            jobs=jobs,
+            users=users,
+            runner=runner,
+            which_func=which_func,
+            check=False,
+        )
+    if which_func("sacct"):
+        return _sacct(
+            fields=fields,
+            jobs=jobs,
+            users=users,
+            allocations=True,
+            runner=runner,
+            which_func=which_func,
+            check=False,
+        )
+    raise SlurmUnavailableError("squeue or sacct command not found on PATH")
 
 
 def submit(
@@ -81,7 +111,7 @@ def submit(
     cmd_str = command if isinstance(command, str) else " ".join(shlex.quote(c) for c in command)
     args.append(cmd_str)
 
-    proc = _run(args, check=False)
+    proc = run_command(args, check=False)
     out = proc.stdout.strip()
     err = proc.stderr.strip()
 
@@ -126,7 +156,7 @@ class Job:
         """Return the current SLURM job status."""
         if not (_which("squeue") or _which("sacct")):
             raise SlurmUnavailableError("squeue or sacct not found on PATH")
-        s = _squeue_status(self.id) or _sacct_status(self.id) or "UNKNOWN"
+        s = _status(self.id) or "UNKNOWN"
         self.last_status = s
         return s
 
@@ -139,7 +169,7 @@ class Job:
 
     def info(self) -> dict[str, str]:
         _require("scontrol")
-        out = _run(["scontrol", "-o", "show", "job", str(self.id)], check=False).stdout.strip()
+        out = run_command(["scontrol", "-o", "show", "job", str(self.id)], check=False).stdout.strip()
         info: dict[str, str] = {}
         if out:
             for token in out.split():
@@ -170,41 +200,24 @@ class Job:
     def cancel(self) -> None:
         """Cancel the job via ``scancel``."""
         _require("scancel")
-        _run(["scancel", str(self.id)], check=False)
+        run_command(["scancel", str(self.id)], check=False)
 
     def tail(self, n: int = 10) -> str:
         """Return the last *n* lines from the job's stdout file."""
         if not self.stdout_path:
             raise FileNotFoundError("stdout path unknown (pass stdout_file in submit())")
-        try:
-            return _run(["tail", "-n", str(n), str(self.stdout_path)], check=False).stdout
-        except Exception:
-            if self.stdout_path.exists():
-                text = self.stdout_path.read_text(encoding="utf-8", errors="replace")
-                return "".join(text.splitlines(True)[-n:])
-            raise FileNotFoundError(f"stdout file not found at: {self.stdout_path}")
+        if self.stdout_path.exists():
+            text = self.stdout_path.read_text(encoding="utf-8", errors="replace")
+            return "".join(text.splitlines(True)[-n:])
+        raise FileNotFoundError(f"stdout file not found at: {self.stdout_path}")
 
 
 def list_jobs(user: str | None = None) -> list[Job]:
     """List SLURM jobs as :class:`Job` instances."""
-    if not (_which("squeue") or _which("sacct")):
-        raise SlurmUnavailableError("squeue or sacct command not found on PATH")
-
-    if _which("squeue"):
-        rows_data = _squeue(
-            fields=["id", "name", "user", "partition", "state", "submit", "start"],
-            users=[user] if user else None,
-            runner=_run,
-            which_func=_which,
-        )
-    else:
-        rows_data = _sacct(
-            fields=["id", "name", "user", "partition", "state", "submit", "start"],
-            users=[user] if user else None,
-            allocations=True,
-            runner=_run,
-            which_func=_which,
-        )
+    rows_data = _fetch(
+        fields=["id", "name", "user", "partition", "state", "submit", "start"],
+        users=[user] if user else None,
+    )
 
     rows: list[Job] = []
     for r in rows_data:
@@ -229,30 +242,12 @@ def list_jobs(user: str | None = None) -> list[Job]:
     return rows
 
 
-def _squeue_status(job_id: int) -> str | None:
+def _status(job_id: int) -> str | None:
     try:
-        rows = _squeue(fields=["state"], jobs=[job_id], runner=_run, which_func=_which)
+        rows = _fetch(fields=["state"], jobs=[job_id])
     except SlurmUnavailableError:
         return None
     return normalize_state(rows[0].get("state", "")) if rows else None
-
-
-def _sacct_status(job_id: int) -> str | None:
-    try:
-        rows = _sacct(
-            fields=["state"],
-            jobs=[job_id],
-            allocations=True,
-            runner=_run,
-            which_func=_which,
-        )
-    except SlurmUnavailableError:
-        return None
-    for r in rows:
-        token = normalize_state(r.get("state", ""))
-        if token:
-            return token
-    return None
 
 
 def _parse_datetime(token: str) -> datetime | None:
