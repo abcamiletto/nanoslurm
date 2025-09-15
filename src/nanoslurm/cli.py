@@ -8,7 +8,6 @@ import yaml
 from rich.console import Console
 from rich.table import Table
 
-from .job import submit
 from .defaults import (
     CONFIG_PATH,
     DEFAULTS,
@@ -17,6 +16,7 @@ from .defaults import (
     load_defaults,
     save_defaults,
 )
+from .job import submit
 
 app = typer.Typer(help="Submit and manage jobs with nanoslurm")
 console = Console()
@@ -78,20 +78,12 @@ def run(
         console.print(f"stderr: {job.stderr_path}")
 
 
-@app.command("monitor")
-def monitor() -> None:
-    """Launch a dashboard for jobs and cluster statistics."""
-    from .tui import DashboardApp
+@app.command("stats")
+def stats() -> None:
+    """Launch a TUI showing cluster statistics."""
+    from .tui import StatsApp
 
-    DashboardApp().run()
-
-
-@app.command("history")
-def history() -> None:
-    """Launch a TUI summarizing recent job completions."""
-    from .tui import SummaryApp
-
-    SummaryApp().run()
+    StatsApp().run()
 
 
 defaults_app = typer.Typer(help="Manage default settings")
