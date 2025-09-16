@@ -5,8 +5,7 @@ from __future__ import annotations
 import logging
 import subprocess
 import time
-from typing import Sequence, Optional
-
+from typing import Optional, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +62,7 @@ def run_command(
             return proc
         except subprocess.CalledProcessError as exc:  # pragma: no cover - requires failing command
             log.warning(
-                "Command failed with return code %s on attempt %s/%s",  # type: ignore[str-bytes-safe]
+                "Command failed with return code %s on attempt %s/%s",
                 exc.returncode,
                 attempt + 1,
                 retries + 1,

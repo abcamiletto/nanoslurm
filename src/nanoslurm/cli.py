@@ -39,7 +39,7 @@ def run(
 ) -> None:
     """Submit a job using nanoslurm."""
     defaults = load_defaults()
-    values: dict[str, object] = {
+    values: dict[str, object | None] = {
         "name": name or defaults.get("name"),
         "cluster": cluster or defaults.get("cluster"),
         "time": time or defaults.get("time"),
@@ -70,6 +70,7 @@ def run(
         if missing:
             raise typer.BadParameter(f"Missing options: {', '.join(missing)}")
 
+    assert command is not None  # for type checkers; validated above
     job = submit(command, **values)  # type: ignore[arg-type]
     console.print(f"[green]Submitted job {job.id} ({job.name})[/green]")
     if job.stdout_path:
