@@ -30,3 +30,4 @@ lint.extend-select = ["I"]
 
 [project.scripts]
 nslurm = "nanoslurm.cli:app"
+nanoslurm = "nanoslurm.cli:app"

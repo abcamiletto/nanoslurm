@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import nanoslurm.job as job
+import nanoslurm.job as job
 import nanoslurm.stats as stats
-from nanoslurm._slurm import normalize_state
+from nanoslurm.backend import normalize_state
 
 
 def test_normalize_state_cases():
@@ -18,7 +19,7 @@ def test_normalize_state_cases():
 
 
 def test_list_jobs_state_normalization(monkeypatch):
-    def fake_fetch(*, fields, **kwargs):
+    def fake_squeue(*, fields, **kwargs):
         return [
             {
                 "id": "1",
@@ -31,7 +32,7 @@ def test_list_jobs_state_normalization(monkeypatch):
             }
         ]
 
-    monkeypatch.setattr(job, "_fetch", fake_fetch)
+    monkeypatch.setattr(job.B, "squeue", fake_squeue)
     rows = job.list_jobs()
     assert rows[0].last_status == "RUNNING"
 
@@ -43,7 +44,7 @@ def test_node_state_counts_normalization(monkeypatch):
             {"state": "alloc+", "count": "3"},
         ]
 
-    monkeypatch.setattr(stats, "_sinfo", fake_sinfo)
+    monkeypatch.setattr(stats.B, "sinfo", fake_sinfo)
     result = stats.node_state_counts()
     assert result == {"idle": 5, "alloc": 3}
 
@@ -57,8 +58,7 @@ def test_job_history_state_normalization(monkeypatch):
             {"user": "alice", "state": "FAILED (rc=1)"},
         ]
 
-    monkeypatch.setattr(stats, "_sacct", fake_sacct)
-    monkeypatch.setattr(stats, "_which", lambda cmd: cmd == "sacct")
+    monkeypatch.setattr(stats.B, "sacct", fake_sacct)
     result = stats.job_history()
     assert result == {
         "alice": {"completed": 1, "failed": 1},

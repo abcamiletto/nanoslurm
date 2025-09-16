@@ -78,12 +78,12 @@ def run(
         console.print(f"stderr: {job.stderr_path}")
 
 
-@app.command("stats")
-def stats() -> None:
-    """Launch a TUI showing cluster statistics."""
-    from .tui import StatsApp
+@app.command("monitor")
+def monitor() -> None:
+    """Launch the job monitor TUI."""
+    from .tui import MonitorApp
 
-    StatsApp().run()
+    MonitorApp().run()
 
 
 defaults_app = typer.Typer(help="Manage default settings")
