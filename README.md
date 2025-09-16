@@ -49,61 +49,6 @@ job.cancel()                    # Cancel job
 
 ```
 
-## Command line interface
-
-Install the CLI from PyPI. Use the `nanoslurm` entry point (a shorter
-`nslurm` alias is also available):
-
-```bash
-pip install nanoslurm
-# or, with uv
-uv tool install nanoslurm
-```
-
-Run `nanoslurm run --help` to see all available options. Use `--` to separate
-SLURM options from the command that should run on the cluster. For example:
-
-```bash
-nanoslurm run \
-  --cluster gpu22 \
-  --time 01:00:00 \
-  --cpus 4 \
-  --memory 16 \
-  --gpus 1 \
-  --stdout-file ./slurm_logs/%j.txt \
-  --stderr-file ./slurm_logs/%j.err \
-  -- python train.py --epochs 10
-```
-
-Add `--interactive / -i` to be prompted for any values that are not supplied on
-the command line:
-
-```bash
-nanoslurm run --interactive -- python train.py --epochs 10
-```
-
-Persist frequently used defaults (stored as YAML under
-`~/.config/nanoslurm/config.yaml`) so you do not have to repeat them:
-
-```bash
-nanoslurm defaults show            # list current defaults
-nanoslurm defaults set cluster gpu22
-nanoslurm defaults set cpus 4
-nanoslurm defaults reset
-nanoslurm defaults edit            # open the YAML config in $EDITOR
-```
-
-Most resource parameters (cluster, time, CPUs, memory, GPUs, etc.) must be set
-explicitly or persisted via `nanoslurm defaults set` before submitting a job.
-
-Launch the interactive job monitor to inspect running and pending jobs:
-
-```bash
-nanoslurm monitor
-```
-
-Use the arrow keys or `h`, `j`, `k`, `l` to move around and `q` to quit.
-
 ## Releasing
 
 Bump the version in `pyproject.toml` and merge the change into `main`. A
