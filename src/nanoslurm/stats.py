@@ -12,10 +12,7 @@ from .job import _TERMINAL
 def node_state_counts() -> dict[str, int]:
     """Return counts of nodes grouped by normalized state."""
 
-    try:
-        rows = B.sinfo(fields=["state", "count"])
-    except B.SlurmUnavailableError:
-        return {}
+    rows = B.sinfo(fields=["state", "count"])
 
     counts: Counter[str] = Counter()
     for row in rows:
@@ -30,10 +27,7 @@ def node_state_counts() -> dict[str, int]:
 def partition_node_state_counts() -> dict[str, dict[str, int]]:
     """Return node state counts grouped by partition."""
 
-    try:
-        rows = B.sinfo(fields=["part", "state", "count"], all_partitions=True)
-    except B.SlurmUnavailableError:
-        return {}
+    rows = B.sinfo(fields=["part", "state", "count"], all_partitions=True)
 
     counts: dict[str, Counter[str]] = {}
     for row in rows:
@@ -55,15 +49,12 @@ def recent_completions(span: str = "day", count: int = 7) -> list[tuple[str, int
 
     delta = timedelta(days=count if span == "day" else count * 7)
     start = (datetime.now() - delta).strftime("%Y-%m-%d")
-    try:
-        rows = B.sacct(
-            fields=["end"],
-            states=["CD"],
-            start_time=start,
-            allocations=True,
-        )
-    except B.SlurmUnavailableError:
-        return []
+    rows = B.sacct(
+        fields=["end"],
+        states=["CD"],
+        start_time=start,
+        allocations=True,
+    )
 
     counts: Counter[str] = Counter()
     for row in rows:
@@ -96,10 +87,7 @@ def _parse_gpu(gres: str) -> int:
 
 
 def _partition_caps() -> dict[str, dict[str, int]]:
-    try:
-        rows = B.sinfo(fields=["part", "cpus", "gres", "nodes"], all_partitions=True)
-    except B.SlurmUnavailableError:
-        return {}
+    rows = B.sinfo(fields=["part", "cpus", "gres", "nodes"], all_partitions=True)
 
     caps: dict[str, dict[str, int]] = {}
     for row in rows:
@@ -130,10 +118,7 @@ def partition_utilization() -> dict[str, float]:
     if not caps:
         return {}
 
-    try:
-        rows = B.squeue(fields=["partition", "cpus", "gres"], states=["RUNNING"])
-    except B.SlurmUnavailableError:
-        return {}
+    rows = B.squeue(fields=["partition", "cpus", "gres"], states=["RUNNING"])
 
     usage: dict[str, dict[str, int]] = {}
     for row in rows:
@@ -164,11 +149,8 @@ def fairshare_scores() -> dict[str, float]:
     rows: list[dict[str, str]]
     try:
         rows = B.sprio(fields=["user", "fairshare"])
-    except B.SlurmUnavailableError:
-        try:
-            rows = B.sshare(fields=["user", "fairshare"])
-        except B.SlurmUnavailableError:
-            return {}
+    except RuntimeError:
+        rows = B.sshare(fields=["user", "fairshare"])
 
     scores: dict[str, float] = {}
     for row in rows:
@@ -189,16 +171,13 @@ def job_history() -> dict[str, dict[str, int]]:
     now = datetime.now()
     start = now - timedelta(hours=24)
 
-    try:
-        rows = B.sacct(
-            fields=["user", "state"],
-            all_users=True,
-            allocations=True,
-            start_time=start.strftime("%Y-%m-%dT%H:%M:%S"),
-            end_time=now.strftime("%Y-%m-%dT%H:%M:%S"),
-        )
-    except B.SlurmUnavailableError:
-        return {}
+    rows = B.sacct(
+        fields=["user", "state"],
+        all_users=True,
+        allocations=True,
+        start_time=start.strftime("%Y-%m-%dT%H:%M:%S"),
+        end_time=now.strftime("%Y-%m-%dT%H:%M:%S"),
+    )
 
     stats: dict[str, dict[str, int]] = {}
     for row in rows:
