@@ -51,38 +51,52 @@ job.cancel()                    # Cancel job
 
 ## Command line interface
 
-Install the CLI with [uv](https://github.com/astral-sh/uv):
+Install the CLI from PyPI. Use the `nanoslurm` entry point (a shorter
+`nslurm` alias is also available):
 
 ```bash
+pip install nanoslurm
+# or, with uv
 uv tool install nanoslurm
 ```
 
-Submit a job from the terminal:
+Run `nanoslurm run --help` to see all available options. Use `--` to separate
+SLURM options from the command that should run on the cluster. For example:
 
 ```bash
-nslurm run -c gpu22 -t 01:00:00 -p 4 -m 16 -g 1 -- python train.py --epochs 10
+nanoslurm run \
+  --cluster gpu22 \
+  --time 01:00:00 \
+  --cpus 4 \
+  --memory 16 \
+  --gpus 1 \
+  --stdout-file ./slurm_logs/%j.txt \
+  --stderr-file ./slurm_logs/%j.err \
+  -- python train.py --epochs 10
 ```
 
-Launch an interactive prompt to build a command and adjust options:
+Add `--interactive / -i` to be prompted for any values that are not supplied on
+the command line:
 
 ```bash
-nslurm run -i
+nanoslurm run --interactive -- python train.py --epochs 10
 ```
 
-Manage persistent defaults (stored as YAML via `platformdirs`):
+Persist frequently used defaults (stored as YAML under
+`~/.config/nanoslurm/config.yaml`) so you do not have to repeat them:
 
 ```bash
-nslurm defaults show            # list current defaults
-nslurm defaults set cluster gpu22
-nslurm defaults reset
-nslurm defaults edit            # open the YAML config in $EDITOR
+nanoslurm defaults show            # list current defaults
+nanoslurm defaults set cluster gpu22
+nanoslurm defaults set cpus 4
+nanoslurm defaults reset
+nanoslurm defaults edit            # open the YAML config in $EDITOR
 ```
 
-Most job parameters (such as cluster, time, or resource counts) have no built-in
-defaults. Set them explicitly on the command line or persist them via
-`nslurm defaults set`.
+Most resource parameters (cluster, time, CPUs, memory, GPUs, etc.) must be set
+explicitly or persisted via `nanoslurm defaults set` before submitting a job.
 
-Launch the interactive job monitor:
+Launch the interactive job monitor to inspect running and pending jobs:
 
 ```bash
 nanoslurm monitor
