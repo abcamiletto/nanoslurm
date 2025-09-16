@@ -17,9 +17,6 @@ _TERMINAL = {"COMPLETED", "FAILED", "CANCELLED", "TIMEOUT", "PREEMPTED", "BOOT_F
 _RUNNINGISH = {"PENDING", "CONFIGURING", "RUNNING", "COMPLETING", "STAGE_OUT", "SUSPENDED", "RESV_DEL_HOLD"}
 
 
-SlurmUnavailableError = B.SlurmUnavailableError
-
-
 def submit(
     command: Iterable[str] | str,
     *,
@@ -218,4 +215,4 @@ def _timestamp_ms() -> str:
     return datetime.now().strftime("%Y-%m-%d_%H-%M-%S.%f")[:-3]
 
 
-__all__ = ["Job", "SlurmUnavailableError", "submit", "list_jobs"]
+__all__ = ["Job", "submit", "list_jobs"]
