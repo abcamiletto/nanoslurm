@@ -8,9 +8,6 @@ authors = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "typer",
-    "rich",
-    "textual",
     "platformdirs",
     "pyyaml",
 ]
@@ -28,6 +25,3 @@ lint.extend-select = ["I"]
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["E402", "F401", "F403"] # exclude imports from __init__.py
 
-[project.scripts]
-nslurm = "nanoslurm.cli:app"
-nanoslurm = "nanoslurm.cli:app"
