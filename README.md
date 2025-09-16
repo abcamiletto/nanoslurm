@@ -82,10 +82,10 @@ Most job parameters (such as cluster, time, or resource counts) have no built-in
 defaults. Set them explicitly on the command line or persist them via
 `nslurm defaults set`.
 
-View cluster statistics in an interactive TUI:
+Launch the interactive job monitor:
 
 ```bash
-nslurm stats
+nanoslurm monitor
 ```
 
 Use the arrow keys or `h`, `j`, `k`, `l` to move around and `q` to quit.
