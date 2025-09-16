@@ -326,6 +326,10 @@ class PartitionScreen(Screen[None]):
 class MonitorApp(App[None]):
     """Application orchestrating the monitor screens."""
 
+    def __init__(self, **kwargs):
+        kwargs.setdefault("ansi_color", True)
+        super().__init__(**kwargs)
+
     TITLE = LOGO
     SUB_TITLE = ""
 
