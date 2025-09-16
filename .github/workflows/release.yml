@@ -61,4 +61,5 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.version }}
           name: v${{ steps.version.outputs.version }}
+          generate_release_notes: true
           files: dist/*
