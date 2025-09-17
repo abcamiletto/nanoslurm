@@ -173,102 +173,6 @@ def sacct(
 
 
 # ---------------------------------------------------------------------------
-# sinfo
-
-SINFO_FIELDS = {
-    "part": "%P",
-    "state": "%T",
-    "count": "%D",
-    "cpus": "%C",
-    "gres": "%G",
-    "nodes": "%D",
-}
-
-
-def sinfo(
-    *,
-    fields: Sequence[str] = ("state", "count"),
-    partitions: Sequence[str] | None = None,
-    states: Sequence[str] | None = None,
-    all_partitions: bool = False,
-    runner=run_command,
-) -> list[dict[str, str]]:
-    require("sinfo")
-
-    cmd = ["sinfo", "-h"]
-    if partitions:
-        cmd += ["-p", ",".join(partitions)]
-    if states:
-        cmd += ["-t", ",".join(states)]
-    if all_partitions:
-        cmd.append("-a")
-
-    fmt = "|".join(SINFO_FIELDS[f] for f in fields)
-    cmd += ["-o", fmt]
-    return _table(cmd, list(fields), "|", runner=runner)
-
-
-# ---------------------------------------------------------------------------
-# sprio and sshare
-
-SPRIO_FIELDS = {
-    "job_id": "jobid",
-    "user": "user",
-    "priority": "priority",
-    "fairshare": "fairshare",
-}
-
-
-def sprio(
-    *,
-    fields: Sequence[str] = ("job_id", "user", "priority"),
-    jobs: Sequence[int] | None = None,
-    users: Sequence[str] | None = None,
-    runner=run_command,
-) -> list[dict[str, str]]:
-    if not available("sprio"):
-        raise SlurmUnavailableError("sprio command not found on PATH")
-
-    cmd = ["sprio", "-n"]
-    if jobs:
-        cmd += ["-j", ",".join(map(str, jobs))]
-    if users:
-        cmd += ["-u", ",".join(users)]
-
-    fmt = ",".join(SPRIO_FIELDS[f] for f in fields)
-    cmd += ["-o", fmt]
-    return _table(cmd, list(fields), None, runner=runner)
-
-
-SSHARE_FIELDS = {
-    "user": "user",
-    "account": "account",
-    "fairshare": "fairshare",
-}
-
-
-def sshare(
-    *,
-    fields: Sequence[str] = ("user", "fairshare"),
-    users: Sequence[str] | None = None,
-    accounts: Sequence[str] | None = None,
-    runner=run_command,
-) -> list[dict[str, str]]:
-    if not available("sshare"):
-        raise SlurmUnavailableError("sshare command not found on PATH")
-
-    cmd = ["sshare", "-n"]
-    if users:
-        cmd += ["-u", ",".join(users)]
-    if accounts:
-        cmd += ["-A", ",".join(accounts)]
-
-    fmt = ",".join(SSHARE_FIELDS[f] for f in fields)
-    cmd += ["-o", fmt]
-    return _table(cmd, list(fields), None, runner=runner)
-
-
-# ---------------------------------------------------------------------------
 # Misc helpers
 
 def scancel(job_id: int, *, runner=run_command) -> None:
@@ -308,9 +212,6 @@ __all__ = [
     "sacct",
     "scancel",
     "scontrol_show_job",
-    "sinfo",
     "squeue",
-    "sprio",
-    "sshare",
 ]
 
