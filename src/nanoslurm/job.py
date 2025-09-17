@@ -118,7 +118,11 @@ class Job:
     def status(self) -> str:
         """Return the current SLURM job status."""
         rows = B.squeue(fields=["state"], jobs=[self.id])
-        token = rows[0].get("state", "") if rows else ""
+        if rows:
+            token = next((row.get("state", "") for row in rows if row.get("state")), "")
+        else:
+            history = B.sacct(fields=["state"], jobs=[self.id])
+            token = next((row.get("state", "") for row in history if row.get("state")), "")
         state = B.normalize_state(token) if token else "UNKNOWN"
         self.last_status = state
         return state
