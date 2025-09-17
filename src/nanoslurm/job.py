@@ -25,7 +25,7 @@ def submit(
     time: str,
     cpus: int,
     memory: int,
-    gpus: int,
+    gpus: int = 0,
     stdout_file: str | Path = "./slurm_logs/%j.txt",
     stderr_file: str | Path = "./slurm_logs/%j.err",
     signal: str = "SIGUSR1@90",
@@ -58,8 +58,10 @@ def submit(
         str(cpus),
         "-m",
         str(memory),
-        "-g",
-        str(gpus),
+    ]
+    if gpus > 0:
+        args += ["-g", str(gpus)]
+    args += [
         "-o",
         str(stdout_file),
         "-e",
