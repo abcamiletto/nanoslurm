@@ -24,6 +24,7 @@ DEFAULTS: dict[str, object] = {
     "stderr_file": "./slurm_logs/%j.err",
     "signal": "SIGUSR1@90",
     "workdir": ".",
+    "gpus": 0,
 }
 
 CONFIG_PATH = Path(user_config_dir("nanoslurm")) / "config.yaml"

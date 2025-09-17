@@ -31,7 +31,7 @@ job = nanoslurm.submit(
     time="01:00:00",
     cpus=4,
     memory=16,
-    gpus=1,
+    gpus=1,  # optional; omit or set to 0 for CPU-only jobs
     stdout_file="./slurm_logs/%j.txt",
     stderr_file="./slurm_logs/%j.err",
     signal="SIGUSR1@90",
@@ -48,6 +48,10 @@ job.wait(poll_interval=5)       # Wait until completion
 job.cancel()                    # Cancel job
 
 ```
+
+For CPU-only workloads simply omit the ``gpus`` argument (or set it to ``0``)
+and ``nanoslurm`` will not add any ``--gres`` directives to the submission
+script.
 
 ## Releasing
 

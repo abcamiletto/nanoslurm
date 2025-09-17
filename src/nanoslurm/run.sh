@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 -n <job_name> -c <partition> -t <HH:MM:SS> -p <CPUS> -m <GB> -g <GPUS> -o <stdout> -e <stderr> -s <SIG@secs> -w <workdir> -- <command...>"
+  echo "Usage: $0 -n <job_name> -c <partition> -t <HH:MM:SS> -p <CPUS> -m <GB> [-g <GPUS>] -o <stdout> -e <stderr> -s <SIG@secs> -w <workdir> -- <command...>"
   exit 1
 }
 
@@ -36,13 +36,12 @@ shift $((OPTIND - 1))
 [[ $# -gt 0 ]] || { echo "Error: no command provided"; usage; }
 SCRIPT_TO_EXECUTE="$*"
 
-# Enforce all flags (no defaults here)
+# Enforce required flags (no defaults here)
 [[ -n "$JOB_NAME"    ]] || { echo "Error: -n <job_name> is required"; usage; }
 [[ -n "$PARTITION"   ]] || { echo "Error: -c <partition> is required"; usage; }
 [[ -n "$SBATCH_TIME" ]] || { echo "Error: -t <HH:MM:SS> is required"; usage; }
 [[ -n "$CPUS"        ]] || { echo "Error: -p <CPUS> is required"; usage; }
 [[ -n "$MEM_GB"      ]] || { echo "Error: -m <GB> is required"; usage; }
-[[ -n "$GPUS"        ]] || { echo "Error: -g <GPUS> is required"; usage; }
 [[ -n "$STDOUT_FILE" ]] || { echo "Error: -o <stdout> is required"; usage; }
 [[ -n "$STDERR_FILE" ]] || { echo "Error: -e <stderr> is required"; usage; }
 [[ -n "$SIGNAL"      ]] || { echo "Error: -s <SIG@secs> is required"; usage; }
@@ -58,7 +57,15 @@ cat > "$TEMP_SCRIPT" <<EOT
 #SBATCH -t $SBATCH_TIME
 #SBATCH -c $CPUS
 #SBATCH --mem=${MEM_GB}G
-#SBATCH --gres=gpu:${GPUS}
+EOT
+
+if [[ -n "$GPUS" && "$GPUS" =~ ^[0-9]+$ ]]; then
+  if (( GPUS > 0 )); then
+    echo "#SBATCH --gres=gpu:${GPUS}" >> "$TEMP_SCRIPT"
+  fi
+fi
+
+cat >> "$TEMP_SCRIPT" <<EOT
 #SBATCH --job-name=$JOB_NAME
 #SBATCH --signal=$SIGNAL
 #SBATCH -o $STDOUT_FILE
